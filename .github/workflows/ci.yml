@@ -31,6 +31,7 @@ jobs:
       DB_HOST: localhost
       DB_PORT: 5432
       DB_NAME: kulha
+      DB_NAME_TEST: kulha
       DB_USER: postgres
       DB_PASSWORD: ci-only-password
 
