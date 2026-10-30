@@ -1,5 +1,7 @@
 package ma.kulha.identity.interfaces.rest;
 
+import ma.kulha.identity.application.InvalidCredentialsException;
+import ma.kulha.identity.application.InvalidRefreshTokenException;
 import ma.kulha.identity.application.InvalidTokenException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -14,6 +16,22 @@ class AuthExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.BAD_REQUEST, "The link is invalid or has expired.");
         problem.setTitle("Invalid token");
+        return problem;
+    }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    ProblemDetail invalidCredentials() {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.UNAUTHORIZED, "Invalid email or password.");
+        problem.setTitle("Authentication failed");
+        return problem;
+    }
+
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    ProblemDetail invalidRefreshToken() {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.UNAUTHORIZED, "The session has expired. Please log in again.");
+        problem.setTitle("Authentication failed");
         return problem;
     }
 }

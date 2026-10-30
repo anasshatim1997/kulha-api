@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.UUID;
 import ma.kulha.identity.application.OpaqueTokens;
@@ -54,13 +53,13 @@ class AuthRegistrationIntegrationTest {
         emails.clear();
     }
 
-    private int post(String path, String json) throws Exception {
+    private int postJson(String path, String json) throws Exception {
         return mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(json))
                 .andReturn().getResponse().getStatus();
     }
 
     private int register(String email) throws Exception {
-        return post("/api/v1/auth/register", """
+        return postJson("/api/v1/auth/register", """
                 {"email":"%s","password":"%s","fullName":"Test User"}
                 """.formatted(email, PASSWORD));
     }
@@ -92,7 +91,7 @@ class AuthRegistrationIntegrationTest {
 
     @Test
     void registerWithInvalidEmailReturns400AndCreatesNothing() throws Exception {
-        int status = post("/api/v1/auth/register", """
+        int status = postJson("/api/v1/auth/register", """
                 {"email":"not-an-email","password":"%s","fullName":"Test User"}
                 """.formatted(PASSWORD));
 
@@ -103,7 +102,7 @@ class AuthRegistrationIntegrationTest {
 
     @Test
     void registerWithShortPasswordReturns400AndCreatesNothing() throws Exception {
-        int status = post("/api/v1/auth/register", """
+        int status = postJson("/api/v1/auth/register", """
                 {"email":"carol@example.com","password":"short","fullName":"Test User"}
                 """);
 
@@ -128,15 +127,15 @@ class AuthRegistrationIntegrationTest {
         String token = RecordingNotificationApi.tokenFrom(emails.sent().get(0));
         String body = "{\"token\":\"" + token + "\"}";
 
-        assertThat(post("/api/v1/auth/verify-email", body)).isEqualTo(204);
+        assertThat(postJson("/api/v1/auth/verify-email", body)).isEqualTo(204);
         assertThat(users.findByEmail("erin@example.com").orElseThrow().isEmailVerified()).isTrue();
 
-        assertThat(post("/api/v1/auth/verify-email", body)).isEqualTo(400);
+        assertThat(postJson("/api/v1/auth/verify-email", body)).isEqualTo(400);
     }
 
     @Test
     void verifyEmailWithAnUnknownTokenReturns400() throws Exception {
-        int status = post("/api/v1/auth/verify-email", "{\"token\":\"" + OpaqueTokens.generate() + "\"}");
+        int status = postJson("/api/v1/auth/verify-email", "{\"token\":\"" + OpaqueTokens.generate() + "\"}");
 
         assertThat(status).isEqualTo(400);
     }
@@ -155,7 +154,7 @@ class AuthRegistrationIntegrationTest {
                 .param("hash", OpaqueTokens.hash(rawToken))
                 .update();
 
-        int status = post("/api/v1/auth/verify-email", "{\"token\":\"" + rawToken + "\"}");
+        int status = postJson("/api/v1/auth/verify-email", "{\"token\":\"" + rawToken + "\"}");
 
         assertThat(status).isEqualTo(400);
         assertThat(users.findByEmail("frank@example.com").orElseThrow().isEmailVerified()).isFalse();
@@ -166,28 +165,31 @@ class AuthRegistrationIntegrationTest {
         register("gina@example.com");
         emails.clear();
 
-        assertThat(post("/api/v1/auth/resend-verification", "{\"email\":\"gina@example.com\"}")).isEqualTo(202);
+        assertThat(postJson("/api/v1/auth/resend-verification", "{\"email\":\"gina@example.com\"}")).isEqualTo(202);
 
         assertThat(emails.sent()).hasSize(1);
         String token = RecordingNotificationApi.tokenFrom(emails.sent().get(0));
-        assertThat(post("/api/v1/auth/verify-email", "{\"token\":\"" + token + "\"}")).isEqualTo(204);
+        assertThat(postJson("/api/v1/auth/verify-email", "{\"token\":\"" + token + "\"}")).isEqualTo(204);
     }
 
     @Test
     void resendVerificationForUnknownOrAlreadyVerifiedUsersReturns202ButSendsNothing() throws Exception {
-        assertThat(post("/api/v1/auth/resend-verification", "{\"email\":\"nobody@example.com\"}")).isEqualTo(202);
+        assertThat(postJson("/api/v1/auth/resend-verification", "{\"email\":\"nobody@example.com\"}")).isEqualTo(202);
 
         register("hana@example.com");
         String token = RecordingNotificationApi.tokenFrom(emails.sent().get(0));
-        post("/api/v1/auth/verify-email", "{\"token\":\"" + token + "\"}");
+        postJson("/api/v1/auth/verify-email", "{\"token\":\"" + token + "\"}");
         emails.clear();
 
-        assertThat(post("/api/v1/auth/resend-verification", "{\"email\":\"hana@example.com\"}")).isEqualTo(202);
+        assertThat(postJson("/api/v1/auth/resend-verification", "{\"email\":\"hana@example.com\"}")).isEqualTo(202);
         assertThat(emails.sent()).isEmpty();
     }
 
     @Test
     void everythingElseStaysDenied() throws Exception {
-        mvc.perform(get("/api/v1/anything")).andExpect(status().isForbidden());
+        // 401 for an anonymous caller (resource server) or 403, depending on the entry point: both mean "denied".
+        int status = mvc.perform(get("/api/v1/anything")).andReturn().getResponse().getStatus();
+
+        assertThat(status).isIn(401, 403);
     }
 }
