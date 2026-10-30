@@ -21,5 +21,24 @@ class EmailTemplatesTest {
     void missingLinkIsRejected() {
         assertThatThrownBy(() -> EmailTemplates.render(TemplateKey.VERIFY_EMAIL, Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> EmailTemplates.render(TemplateKey.RESET_PASSWORD, Map.of()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void resetPasswordContainsTheLinkAndTheValidity() {
+        EmailMessage message = EmailTemplates.render(
+                TemplateKey.RESET_PASSWORD, Map.of("link", "http://localhost:3000/reset-password?token=xyz"));
+
+        assertThat(message.subject()).contains("mot de passe");
+        assertThat(message.body()).contains("http://localhost:3000/reset-password?token=xyz").contains("1 heure");
+    }
+
+    @Test
+    void passwordChangedNeedsNoParameters() {
+        EmailMessage message = EmailTemplates.render(TemplateKey.PASSWORD_CHANGED, Map.of());
+
+        assertThat(message.subject()).contains("modifié");
+        assertThat(message.body()).isNotBlank();
     }
 }

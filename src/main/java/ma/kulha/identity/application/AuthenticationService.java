@@ -9,6 +9,9 @@ import ma.kulha.identity.domain.model.User;
 import ma.kulha.identity.domain.model.UserStatus;
 import ma.kulha.identity.domain.repository.RefreshTokenRepository;
 import ma.kulha.identity.domain.repository.UserRepository;
+import ma.kulha.shared.ratelimit.RateLimitExceededException;
+import ma.kulha.shared.ratelimit.RateLimitResult;
+import ma.kulha.shared.ratelimit.RateLimiter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -21,6 +24,7 @@ public class AuthenticationService {
     private final RefreshTokenRepository refreshTokens;
     private final PasswordEncoder passwordEncoder;
     private final AccessTokenIssuer accessTokens;
+    private final RateLimiter rateLimiter;
     private final TransactionTemplate tx;
     private final Clock clock;
     private final Duration refreshTtl;
@@ -30,6 +34,7 @@ public class AuthenticationService {
                           RefreshTokenRepository refreshTokens,
                           PasswordEncoder passwordEncoder,
                           AccessTokenIssuer accessTokens,
+                          RateLimiter rateLimiter,
                           TransactionTemplate tx,
                           Clock clock,
                           @Value("${app.security.refresh-ttl-days:30}") long refreshTtlDays) {
@@ -37,6 +42,7 @@ public class AuthenticationService {
         this.refreshTokens = refreshTokens;
         this.passwordEncoder = passwordEncoder;
         this.accessTokens = accessTokens;
+        this.rateLimiter = rateLimiter;
         this.tx = tx;
         this.clock = clock;
         this.refreshTtl = Duration.ofDays(refreshTtlDays);
@@ -44,9 +50,21 @@ public class AuthenticationService {
         this.dummyHash = passwordEncoder.encode("kulha-dummy-password");
     }
 
+    /**
+     * At most 10 attempts per 15 minutes per account (counted for any email, known or not).
+     * This is a temporary slowdown, never a permanent lock that a stranger could trigger.
+     */
     public TokenPair login(String email, String password) {
         Instant now = clock.instant();
-        User user = users.findByEmail(User.normalizeEmail(email)).orElse(null);
+        String normalized = User.normalizeEmail(email);
+
+        RateLimitResult limit = rateLimiter.tryAcquire(
+                "login:acct:" + OpaqueTokens.hash(normalized), 10, Duration.ofMinutes(15));
+        if (!limit.allowed()) {
+            throw new RateLimitExceededException(limit.retryAfterSeconds());
+        }
+
+        User user = users.findByEmail(normalized).orElse(null);
         boolean passwordMatches = passwordEncoder.matches(password, user != null ? user.passwordHash() : dummyHash);
         if (user == null || !passwordMatches || user.status() != UserStatus.ACTIVE) {
             throw new InvalidCredentialsException();

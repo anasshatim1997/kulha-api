@@ -82,6 +82,18 @@ class JdbcRefreshTokenRepository implements RefreshTokenRepository {
                 .update();
     }
 
+    @Override
+    public int revokeAllForUser(UUID userId, Instant now) {
+        return jdbc.sql("""
+                UPDATE identity.refresh_tokens
+                SET revoked_at = :now
+                WHERE user_id = :userId AND revoked_at IS NULL
+                """)
+                .param("now", toDb(now), Types.TIMESTAMP_WITH_TIMEZONE)
+                .param("userId", userId)
+                .update();
+    }
+
     private static OffsetDateTime toDb(Instant instant) {
         return instant.atOffset(ZoneOffset.UTC);
     }

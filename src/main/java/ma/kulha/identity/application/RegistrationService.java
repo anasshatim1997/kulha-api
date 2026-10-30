@@ -12,6 +12,7 @@ import ma.kulha.identity.domain.repository.EmailTokenRepository;
 import ma.kulha.identity.domain.repository.UserRepository;
 import ma.kulha.notification.application.NotificationApi;
 import ma.kulha.notification.application.TemplateKey;
+import ma.kulha.shared.ratelimit.RateLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +31,7 @@ public class RegistrationService {
     private final EmailTokenRepository tokens;
     private final PasswordEncoder passwordEncoder;
     private final NotificationApi notifications;
+    private final RateLimiter rateLimiter;
     private final TransactionTemplate tx;
     private final Clock clock;
     private final String webBaseUrl;
@@ -38,6 +40,7 @@ public class RegistrationService {
                         EmailTokenRepository tokens,
                         PasswordEncoder passwordEncoder,
                         NotificationApi notifications,
+                        RateLimiter rateLimiter,
                         TransactionTemplate tx,
                         Clock clock,
                         @Value("${app.web-base-url}") String webBaseUrl) {
@@ -45,6 +48,7 @@ public class RegistrationService {
         this.tokens = tokens;
         this.passwordEncoder = passwordEncoder;
         this.notifications = notifications;
+        this.rateLimiter = rateLimiter;
         this.tx = tx;
         this.clock = clock;
         this.webBaseUrl = webBaseUrl.replaceAll("/+$", "");
@@ -83,9 +87,17 @@ public class RegistrationService {
         });
     }
 
-    /** Sends a new verification email if the account exists and is not verified. Reveals nothing. */
+    /**
+     * Sends a new verification email if the account exists and is not verified. Reveals nothing.
+     * At most 3 emails per hour per address; beyond that the request is silently ignored.
+     */
     public void resendVerification(String email) {
-        users.findByEmail(User.normalizeEmail(email))
+        String normalized = User.normalizeEmail(email);
+        if (!rateLimiter.tryAcquire("resend:acct:" + OpaqueTokens.hash(normalized), 3, Duration.ofHours(1)).allowed()) {
+            log.warn("Verification email skipped: too many requests for one account");
+            return;
+        }
+        users.findByEmail(normalized)
                 .filter(user -> !user.isEmailVerified() && user.status() == UserStatus.ACTIVE)
                 .ifPresent(user -> {
                     Instant now = clock.instant();

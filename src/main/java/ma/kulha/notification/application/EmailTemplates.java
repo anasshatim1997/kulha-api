@@ -21,6 +21,29 @@ final class EmailTemplates {
 
                     L'équipe KULHA!
                     """.formatted(require(params, "link")));
+            case RESET_PASSWORD -> new EmailMessage(
+                    "Réinitialisation de votre mot de passe - KULHA!",
+                    """
+                    Bonjour,
+
+                    Vous avez demandé à réinitialiser votre mot de passe. Ouvrez ce lien (valable 1 heure) :
+                    %s
+
+                    Si vous n'êtes pas à l'origine de cette demande, ignorez ce message : votre mot de passe ne change pas.
+
+                    L'équipe KULHA!
+                    """.formatted(require(params, "link")));
+            case PASSWORD_CHANGED -> new EmailMessage(
+                    "Votre mot de passe a été modifié - KULHA!",
+                    """
+                    Bonjour,
+
+                    Le mot de passe de votre compte KULHA! vient d'être modifié et vos sessions ont été fermées.
+
+                    Si ce n'est pas vous, utilisez « Mot de passe oublié » pour reprendre le contrôle de votre compte.
+
+                    L'équipe KULHA!
+                    """);
         };
     }
 

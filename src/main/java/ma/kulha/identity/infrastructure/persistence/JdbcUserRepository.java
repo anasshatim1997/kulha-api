@@ -101,6 +101,14 @@ class JdbcUserRepository implements UserRepository {
                 .update();
     }
 
+    @Override
+    public boolean existsByRole(Role role) {
+        return jdbc.sql("SELECT EXISTS (SELECT 1 FROM identity.user_roles WHERE role = :role)")
+                .param("role", role.name())
+                .query(Boolean.class)
+                .single();
+    }
+
     private User withRoles(Row row) {
         List<Role> roles = jdbc.sql("SELECT role FROM identity.user_roles WHERE user_id = :id")
                 .param("id", row.id())

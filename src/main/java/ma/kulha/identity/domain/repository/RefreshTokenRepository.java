@@ -23,4 +23,7 @@ public interface RefreshTokenRepository {
 
     /** Revokes every token of the family that is still active. Returns how many were revoked. */
     int revokeFamily(UUID familyId, Instant now);
+
+    /** Revokes every active token of a user, on every device. Returns how many were revoked. */
+    int revokeAllForUser(UUID userId, Instant now);
 }

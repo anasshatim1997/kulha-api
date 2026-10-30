@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME_TEST:kulha_test}
+
+app:
+  rate-limit:
+    # Off in tests so that many logins from one address do not trip the limits.
+    # RateLimitIntegrationTest switches it on for its own context.
+    enabled: false

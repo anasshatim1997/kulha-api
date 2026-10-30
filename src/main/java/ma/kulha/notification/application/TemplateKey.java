@@ -1,5 +1,7 @@
 package ma.kulha.notification.application;
 
 public enum TemplateKey {
-    VERIFY_EMAIL
+    VERIFY_EMAIL,
+    RESET_PASSWORD,
+    PASSWORD_CHANGED
 }

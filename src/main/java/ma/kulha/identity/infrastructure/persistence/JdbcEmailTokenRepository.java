@@ -54,6 +54,19 @@ class JdbcEmailTokenRepository implements EmailTokenRepository {
                 .optional();
     }
 
+    @Override
+    public void invalidateUnused(UUID userId, EmailTokenType type, Instant now) {
+        jdbc.sql("""
+                UPDATE identity.email_tokens
+                SET used_at = :now
+                WHERE user_id = :userId AND type = :type AND used_at IS NULL
+                """)
+                .param("now", toDb(now), Types.TIMESTAMP_WITH_TIMEZONE)
+                .param("userId", userId)
+                .param("type", type.name())
+                .update();
+    }
+
     private static OffsetDateTime toDb(Instant instant) {
         return instant.atOffset(ZoneOffset.UTC);
     }

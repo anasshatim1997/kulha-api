@@ -15,4 +15,7 @@ public interface EmailTokenRepository {
      * Returns empty if the token is unknown, already used or expired. A token can succeed only once.
      */
     Optional<UUID> consume(String tokenHash, EmailTokenType type, Instant now);
+
+    /** Marks every unused token of that user and type as used, so older links stop working. */
+    void invalidateUnused(UUID userId, EmailTokenType type, Instant now);
 }
