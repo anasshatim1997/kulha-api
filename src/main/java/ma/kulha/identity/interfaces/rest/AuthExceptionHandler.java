@@ -1,0 +1,19 @@
+package ma.kulha.identity.interfaces.rest;
+
+import ma.kulha.identity.application.InvalidTokenException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@RestControllerAdvice(assignableTypes = AuthController.class)
+class AuthExceptionHandler {
+
+    @ExceptionHandler(InvalidTokenException.class)
+    ProblemDetail invalidToken() {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, "The link is invalid or has expired.");
+        problem.setTitle("Invalid token");
+        return problem;
+    }
+}
