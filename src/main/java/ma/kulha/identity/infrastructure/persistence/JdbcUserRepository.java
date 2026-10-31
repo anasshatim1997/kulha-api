@@ -102,6 +102,14 @@ class JdbcUserRepository implements UserRepository {
     }
 
     @Override
+    public void removeRole(UUID userId, Role role) {
+        jdbc.sql("DELETE FROM identity.user_roles WHERE user_id = :id AND role = :role")
+                .param("id", userId)
+                .param("role", role.name())
+                .update();
+    }
+
+    @Override
     public boolean existsByRole(Role role) {
         return jdbc.sql("SELECT EXISTS (SELECT 1 FROM identity.user_roles WHERE role = :role)")
                 .param("role", role.name())

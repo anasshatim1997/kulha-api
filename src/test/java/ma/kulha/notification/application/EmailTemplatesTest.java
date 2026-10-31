@@ -41,4 +41,26 @@ class EmailTemplatesTest {
         assertThat(message.subject()).contains("modifié");
         assertThat(message.body()).isNotBlank();
     }
+
+    @Test
+    void merchantApprovedNamesTheShop() {
+        EmailMessage message = EmailTemplates.render(
+                TemplateKey.MERCHANT_APPROVED, Map.of("merchantName", "Boulangerie Atlas"));
+
+        assertThat(message.subject()).contains("approuvé");
+        assertThat(message.body()).contains("Boulangerie Atlas");
+    }
+
+    @Test
+    void merchantRejectedAndSuspendedExplainTheReason() {
+        Map<String, String> params = Map.of("merchantName", "Boulangerie Atlas", "reason", "Adresse introuvable");
+
+        assertThat(EmailTemplates.render(TemplateKey.MERCHANT_REJECTED, params).body())
+                .contains("Boulangerie Atlas").contains("Adresse introuvable");
+        assertThat(EmailTemplates.render(TemplateKey.MERCHANT_SUSPENDED, params).body())
+                .contains("Boulangerie Atlas").contains("Adresse introuvable");
+        assertThatThrownBy(() -> EmailTemplates.render(
+                TemplateKey.MERCHANT_REJECTED, Map.of("merchantName", "Boulangerie Atlas")))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

@@ -24,5 +24,8 @@ public interface UserRepository {
     /** Adds a role. Does nothing if the user already has it. */
     void addRole(UUID userId, Role role);
 
+    /** Removes a role. Does nothing if the user does not have it. */
+    void removeRole(UUID userId, Role role);
+
     boolean existsByRole(Role role);
 }

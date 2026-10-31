@@ -44,6 +44,41 @@ final class EmailTemplates {
 
                     L'équipe KULHA!
                     """);
+            case MERCHANT_APPROVED -> new EmailMessage(
+                    "Votre commerce est approuvé - KULHA!",
+                    """
+                    Bonjour,
+
+                    Bonne nouvelle : « %s » est approuvé sur KULHA!. Vous pouvez maintenant publier des offres.
+
+                    L'équipe KULHA!
+                    """.formatted(require(params, "merchantName")));
+            case MERCHANT_REJECTED -> new EmailMessage(
+                    "Votre demande n'a pas été acceptée - KULHA!",
+                    """
+                    Bonjour,
+
+                    Votre demande pour « %s » n'a pas été acceptée.
+
+                    Motif : %s
+
+                    Vous pouvez corriger les informations de votre commerce et soumettre à nouveau votre demande.
+
+                    L'équipe KULHA!
+                    """.formatted(require(params, "merchantName"), require(params, "reason")));
+            case MERCHANT_SUSPENDED -> new EmailMessage(
+                    "Votre commerce est suspendu - KULHA!",
+                    """
+                    Bonjour,
+
+                    « %s » est suspendu sur KULHA!. Vos offres ne sont plus visibles.
+
+                    Motif : %s
+
+                    Contactez-nous pour en discuter.
+
+                    L'équipe KULHA!
+                    """.formatted(require(params, "merchantName"), require(params, "reason")));
         };
     }
 

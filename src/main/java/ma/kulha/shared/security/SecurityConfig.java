@@ -41,6 +41,9 @@ public class SecurityConfig {
                         "/api/v1/auth/forgot-password",
                         "/api/v1/auth/reset-password").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/me").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/v1/merchants/apply").authenticated()
+                .requestMatchers("/api/v1/merchants/me").authenticated()
+                .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .anyRequest().denyAll()   // deny by default; open routes explicitly, one at a time
             )
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtConverter)));
