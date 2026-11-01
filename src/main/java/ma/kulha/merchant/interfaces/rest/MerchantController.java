@@ -1,6 +1,8 @@
 package ma.kulha.merchant.interfaces.rest;
 
 import jakarta.validation.Valid;
+
+import java.util.Objects;
 import java.util.UUID;
 import ma.kulha.merchant.application.MerchantService;
 import ma.kulha.merchant.interfaces.dto.MerchantProfileRequest;
@@ -29,17 +31,17 @@ public class MerchantController {
     @PostMapping("/apply")
     ResponseEntity<MerchantResponse> apply(@AuthenticationPrincipal Jwt jwt,
                                            @Valid @RequestBody MerchantProfileRequest request) {
-        var merchant = merchants.apply(UUID.fromString(jwt.getSubject()), request.toProfile());
+        var merchant = merchants.apply(UUID.fromString(Objects.requireNonNull(jwt.getSubject())), request.toProfile());
         return ResponseEntity.status(HttpStatus.CREATED).body(MerchantResponse.from(merchant));
     }
 
     @GetMapping("/me")
     MerchantResponse me(@AuthenticationPrincipal Jwt jwt) {
-        return MerchantResponse.from(merchants.getOwn(UUID.fromString(jwt.getSubject())));
+        return MerchantResponse.from(merchants.getOwn(UUID.fromString(Objects.requireNonNull(jwt.getSubject()))));
     }
 
     @PutMapping("/me")
     MerchantResponse update(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody MerchantProfileRequest request) {
-        return MerchantResponse.from(merchants.updateOwn(UUID.fromString(jwt.getSubject()), request.toProfile()));
+        return MerchantResponse.from(merchants.updateOwn(UUID.fromString(Objects.requireNonNull(jwt.getSubject())), request.toProfile()));
     }
 }

@@ -1,6 +1,8 @@
 package ma.kulha.merchant.interfaces.rest;
 
 import jakarta.validation.Valid;
+
+import java.util.Objects;
 import java.util.UUID;
 import ma.kulha.merchant.application.MerchantService;
 import ma.kulha.merchant.application.PageResult;
@@ -37,7 +39,7 @@ public class AdminMerchantController {
                                              @RequestParam(defaultValue = "0") int page,
                                              @RequestParam(defaultValue = "20") int size) {
         int safePage = Math.max(page, 0);
-        int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        int safeSize = Math.clamp(size, 1, MAX_PAGE_SIZE);
         PageResult<AdminMerchantView> result = merchants.list(status, safePage, safeSize);
         return new PageResponse<>(
                 result.items().stream().map(AdminMerchantResponse::from).toList(),
@@ -51,18 +53,18 @@ public class AdminMerchantController {
 
     @PostMapping("/{id}/approve")
     AdminMerchantResponse approve(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
-        return AdminMerchantResponse.from(merchants.approve(UUID.fromString(jwt.getSubject()), id));
+        return AdminMerchantResponse.from(merchants.approve(UUID.fromString(Objects.requireNonNull(jwt.getSubject())), id));
     }
 
     @PostMapping("/{id}/reject")
     AdminMerchantResponse reject(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
                                  @Valid @RequestBody DecisionReasonRequest request) {
-        return AdminMerchantResponse.from(merchants.reject(UUID.fromString(jwt.getSubject()), id, request.reason()));
+        return AdminMerchantResponse.from(merchants.reject(UUID.fromString(Objects.requireNonNull(jwt.getSubject())), id, request.reason()));
     }
 
     @PostMapping("/{id}/suspend")
     AdminMerchantResponse suspend(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
                                   @Valid @RequestBody DecisionReasonRequest request) {
-        return AdminMerchantResponse.from(merchants.suspend(UUID.fromString(jwt.getSubject()), id, request.reason()));
+        return AdminMerchantResponse.from(merchants.suspend(UUID.fromString(Objects.requireNonNull(jwt.getSubject())), id, request.reason()));
     }
 }

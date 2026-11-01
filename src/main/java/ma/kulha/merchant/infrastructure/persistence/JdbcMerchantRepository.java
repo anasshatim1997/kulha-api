@@ -98,7 +98,7 @@ class JdbcMerchantRepository implements MerchantRepository {
                 .param("id", m.id())
                 .param("expected", expectedStatus.name())
                 .update();
-        return updated == 1;
+        return updated != 1;
     }
 
     @Override

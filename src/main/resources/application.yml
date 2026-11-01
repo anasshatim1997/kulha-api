@@ -35,3 +35,13 @@ app:
   web-base-url: ${APP_WEB_BASE_URL:http://localhost:3000}
   mail:
     from: ${MAIL_FROM:no-reply@kulha.local}
+
+  security:
+    jwt:
+      issuer: ${APP_SECURITY_JWT_ISSUER:kulha-api}
+      audience: ${APP_SECURITY_JWT_AUDIENCE:kulha-clients}
+      access-ttl-minutes: ${APP_SECURITY_JWT_ACCESS_TTL_MINUTES:10}
+      key-id: ${APP_SECURITY_JWT_KEY_ID:kulha-primary}
+      private-key-base64: ${APP_SECURITY_JWT_PRIVATE_KEY_BASE64:}
+      public-key-base64: ${APP_SECURITY_JWT_PUBLIC_KEY_BASE64:}
+      allow-ephemeral-key: ${APP_SECURITY_JWT_ALLOW_EPHEMERAL_KEY:false}

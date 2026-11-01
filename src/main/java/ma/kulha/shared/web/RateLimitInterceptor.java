@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.util.Map;
 import ma.kulha.shared.ratelimit.RateLimitResult;
 import ma.kulha.shared.ratelimit.RateLimiter;
+import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -37,7 +38,7 @@ class RateLimitInterceptor implements HandlerInterceptor {
     }
 
     @Override
-    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
+    public boolean preHandle(HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull Object handler)
             throws IOException {
         if (!"POST".equals(request.getMethod())) {
             return true;

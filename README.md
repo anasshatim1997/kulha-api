@@ -193,6 +193,31 @@ Rules 2 and 3 are enforced by ArchUnit. Availability and orders live in the same
 - Timestamps in UTC (`timestamptz`).
 - Money in MAD. Decide between integer minor units and `numeric(12,2)` and record it in an ADR before the first price column.
 
+## JWT signing key configuration
+
+For local development, copy `.env.example` to `.env`. The example explicitly enables an ephemeral RSA key for local use only. A new local key is generated at each restart, so existing access tokens stop validating after a restart; users can sign in again or refresh using a valid refresh token.
+
+For staging and production, leave `APP_SECURITY_JWT_ALLOW_EPHEMERAL_KEY=false` and inject a persistent RSA key pair from your secret manager:
+
+- `APP_SECURITY_JWT_PRIVATE_KEY_BASE64`: Base64-encoded PKCS#8 DER private key
+- `APP_SECURITY_JWT_PUBLIC_KEY_BASE64`: Base64-encoded X.509 DER public key
+- `APP_SECURITY_JWT_KEY_ID`: stable, non-secret key identifier (the JWT `kid`)
+
+Generate a 2048-bit or stronger RSA key pair with OpenSSL (keep the private key secure):
+
+```bash
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out jwt-private.pem
+openssl pkey -in jwt-private.pem -pubout -out jwt-public.pem
+openssl pkcs8 -topk8 -nocrypt -in jwt-private.pem -outform DER | openssl base64 -A > jwt-private.b64
+openssl pkey -pubin -in jwt-public.pem -outform DER | openssl base64 -A > jwt-public.b64
+```
+
+Store the contents of the two `.b64` files in your secret manager as the corresponding environment variables. Never commit the PEM or `.b64` key files. The API checks that the public and private keys match at startup. This version supports one active signing key; replacing it invalidates old access tokens.
+
+## Google OAuth / OIDC status
+
+Google sign-in is not implemented in this backend yet. The current `spring-boot-starter-oauth2-resource-server` dependency validates KULHA-issued bearer JWTs; it does not provide Google login. The accepted identity ADR (`docs/adr/002-identity-provider.md`) deliberately selects first-party email/password authentication for the pilot. Do not enable a frontend Google button pointing at `/oauth2/authorization/google` until an OAuth2 client, OIDC callback/account-linking flow, and token handoff have been implemented and tested. See `docs/security/API_SECURITY_REVIEW_2026-11-01.md`.
+
 ## Security baseline
 
 - No secrets in Git, images or logs. `.env` is in `.gitignore`. Check `git status` before every commit.

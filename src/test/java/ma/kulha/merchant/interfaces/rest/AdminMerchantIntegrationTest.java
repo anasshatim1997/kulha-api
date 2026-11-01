@@ -1,3 +1,4 @@
+
 package ma.kulha.merchant.interfaces.rest;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -64,7 +65,8 @@ class AdminMerchantIntegrationTest extends AbstractApiIntegrationTest {
     void approveMakesTheOwnerAMerchantWritesTheAuditAndSendsTheEmail() throws Exception {
         String merchantId = applyAs("owner@example.com", "Boulangerie Atlas");
         String ownerToken = tokenForEmail("owner@example.com");
-        User admin = users.findByEmail("admin@example.com").orElse(null);
+        users.findByEmail("admin@example.com");
+        User admin;
         String adminToken = adminToken();
         admin = users.findByEmail("admin@example.com").orElseThrow();
 
@@ -72,9 +74,9 @@ class AdminMerchantIntegrationTest extends AbstractApiIntegrationTest {
 
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(response.getContentAsString()).contains("\"status\":\"APPROVED\"").contains("owner@example.com");
-        // The same access token now carries the merchant role, because roles are read from the database.
+        // The same access token now carries the merchant role because roles are read from the database.
         assertThat(doGet("/api/v1/me", ownerToken).getContentAsString()).contains("MERCHANT");
-        assertThat(auditCount("MERCHANT", merchantId)).isEqualTo(1);
+        assertThat(auditCount(merchantId)).isEqualTo(1);
         String action = jdbc.sql("SELECT action FROM admin.audit_log WHERE target_id = :id")
                 .param("id", merchantId).query(String.class).single();
         assertThat(action).isEqualTo("MERCHANT_APPROVED");
@@ -82,8 +84,8 @@ class AdminMerchantIntegrationTest extends AbstractApiIntegrationTest {
                 .param("id", merchantId).query(UUID.class).single();
         assertThat(actor).isEqualTo(admin.id());
         assertThat(emails.sent()).hasSize(1);
-        assertThat(emails.sent().get(0).to()).isEqualTo("owner@example.com");
-        assertThat(emails.sent().get(0).template()).isEqualTo(TemplateKey.MERCHANT_APPROVED);
+        assertThat(emails.sent().getFirst().to()).isEqualTo("owner@example.com");
+        assertThat(emails.sent().getFirst().template()).isEqualTo(TemplateKey.MERCHANT_APPROVED);
     }
 
     @Test
@@ -109,8 +111,8 @@ class AdminMerchantIntegrationTest extends AbstractApiIntegrationTest {
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(response.getContentAsString()).contains("\"status\":\"REJECTED\"").contains("Adresse introuvable");
         assertThat(doGet("/api/v1/me", ownerToken).getContentAsString()).doesNotContain("MERCHANT");
-        assertThat(emails.sent().get(0).template()).isEqualTo(TemplateKey.MERCHANT_REJECTED);
-        assertThat(emails.sent().get(0).params().get("reason")).isEqualTo("Adresse introuvable");
+        assertThat(emails.sent().getFirst().template()).isEqualTo(TemplateKey.MERCHANT_REJECTED);
+        assertThat(emails.sent().getFirst().params().get("reason")).isEqualTo("Adresse introuvable");
         String reason = jdbc.sql("SELECT reason FROM admin.audit_log WHERE target_id = :id")
                 .param("id", merchantId).query(String.class).single();
         assertThat(reason).isEqualTo("Adresse introuvable");
@@ -125,7 +127,7 @@ class AdminMerchantIntegrationTest extends AbstractApiIntegrationTest {
         assertThat(doPostEmpty(approvePath(merchantId), adminToken).getStatus()).isEqualTo(409);
         assertThat(doPost(rejectPath(merchantId), "{\"reason\":\"Trop tard\"}", adminToken).getStatus())
                 .isEqualTo(409);
-        assertThat(auditCount("MERCHANT", merchantId)).isEqualTo(1);
+        assertThat(auditCount(merchantId)).isEqualTo(1);
     }
 
     @Test
@@ -144,7 +146,7 @@ class AdminMerchantIntegrationTest extends AbstractApiIntegrationTest {
 
         assertThat(doPostEmpty(approvePath(merchantId), adminToken).getStatus()).isEqualTo(200);
         assertThat(doGet("/api/v1/me", ownerToken).getContentAsString()).contains("MERCHANT");
-        assertThat(auditCount("MERCHANT", merchantId)).isEqualTo(3);
+        assertThat(auditCount(merchantId)).isEqualTo(3);
     }
 
     @Test
@@ -227,6 +229,6 @@ class AdminMerchantIntegrationTest extends AbstractApiIntegrationTest {
         executor.shutdown();
 
         assertThat(firstWon ^ secondWon).as("exactly one decision wins").isTrue();
-        assertThat(auditCount("MERCHANT", merchantId.toString())).isEqualTo(1);
+        assertThat(auditCount(merchantId.toString())).isEqualTo(1);
     }
 }

@@ -33,3 +33,12 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Environment-specific secrets; keep the safe template only.
+.env
+.env.*
+!.env.example
+
+# Build and local IDE artifacts
+/target/
+/.idea/

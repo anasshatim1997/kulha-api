@@ -98,8 +98,8 @@ public abstract class AbstractApiIntegrationTest {
         return send(post(path), token);
     }
 
-    protected MockHttpServletResponse doPut(String path, String json, String token) throws Exception {
-        return send(put(path).contentType(MediaType.APPLICATION_JSON).content(json), token);
+    protected MockHttpServletResponse doPut(String json, String token) throws Exception {
+        return send(put("/api/v1/merchants/me").contentType(MediaType.APPLICATION_JSON).content(json), token);
     }
 
     protected MockHttpServletResponse doGet(String path, String token) throws Exception {
@@ -130,9 +130,9 @@ public abstract class AbstractApiIntegrationTest {
         return field(response, "id");
     }
 
-    protected long auditCount(String targetType, String targetId) {
+    protected long auditCount(String targetId) {
         return jdbc.sql("SELECT count(*) FROM admin.audit_log WHERE target_type = :t AND target_id = :id")
-                .param("t", targetType).param("id", targetId).query(Long.class).single();
+                .param("t", "MERCHANT").param("id", targetId).query(Long.class).single();
     }
 
     protected static String field(MockHttpServletResponse response, String name) throws Exception {

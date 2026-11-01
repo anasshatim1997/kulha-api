@@ -78,7 +78,7 @@ class MerchantApplicationIntegrationTest extends AbstractApiIntegrationTest {
         String token = tokenFor(createUser("owner@example.com", true));
         doPost("/api/v1/merchants/apply", profileJson("Boulangerie Atlas"), token);
 
-        MockHttpServletResponse response = doPut("/api/v1/merchants/me", profileJson("Boulangerie Atlas 2"), token);
+        MockHttpServletResponse response = doPut(profileJson("Boulangerie Atlas 2"), token);
 
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(response.getContentAsString()).contains("Boulangerie Atlas 2").contains("\"status\":\"PENDING\"");
@@ -92,7 +92,7 @@ class MerchantApplicationIntegrationTest extends AbstractApiIntegrationTest {
         String ownerToken = tokenForEmail("owner@example.com");
         assertThat(doGet("/api/v1/merchants/me", ownerToken).getContentAsString()).contains("REJECTED");
 
-        MockHttpServletResponse response = doPut("/api/v1/merchants/me", profileJson("Boulangerie Atlas"), ownerToken);
+        MockHttpServletResponse response = doPut(profileJson("Boulangerie Atlas"), ownerToken);
 
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(response.getContentAsString()).contains("\"status\":\"PENDING\"").contains("\"decisionReason\":null");
@@ -106,7 +106,7 @@ class MerchantApplicationIntegrationTest extends AbstractApiIntegrationTest {
         doPost("/api/v1/admin/merchants/" + merchantId + "/suspend", "{\"reason\":\"Plaintes\"}", adminToken);
 
         MockHttpServletResponse response =
-                doPut("/api/v1/merchants/me", profileJson("Autre"), tokenForEmail("owner@example.com"));
+                doPut(profileJson("Autre"), tokenForEmail("owner@example.com"));
 
         assertThat(response.getStatus()).isEqualTo(409);
     }

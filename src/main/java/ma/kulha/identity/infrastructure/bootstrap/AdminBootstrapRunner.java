@@ -1,6 +1,7 @@
 package ma.kulha.identity.infrastructure.bootstrap;
 
 import ma.kulha.identity.application.AdminBootstrapService;
+import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,7 +31,7 @@ class AdminBootstrapRunner implements ApplicationRunner {
     }
 
     @Override
-    public void run(ApplicationArguments args) {
+    public void run(@NonNull ApplicationArguments args) {
         AdminBootstrapService.Result result = service.ensureAdmin(email, password);
         switch (result) {
             case CREATED, PROMOTED -> log.info("Admin bootstrap: {}. Remove ADMIN_BOOTSTRAP_PASSWORD from the environment.", result);

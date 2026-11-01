@@ -1,10 +1,12 @@
 package ma.kulha.identity.infrastructure.security;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import ma.kulha.identity.domain.model.User;
 import ma.kulha.identity.domain.model.UserStatus;
 import ma.kulha.identity.domain.repository.UserRepository;
+import org.jspecify.annotations.NonNull;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
@@ -29,10 +31,10 @@ class DatabaseBackedJwtConverter implements Converter<Jwt, AbstractAuthenticatio
     }
 
     @Override
-    public AbstractAuthenticationToken convert(Jwt jwt) {
+    public AbstractAuthenticationToken convert(@NonNull Jwt jwt) {
         UUID userId;
         try {
-            userId = UUID.fromString(jwt.getSubject());
+            userId = UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
         } catch (RuntimeException e) {
             throw new InvalidBearerTokenException("Invalid token subject");
         }

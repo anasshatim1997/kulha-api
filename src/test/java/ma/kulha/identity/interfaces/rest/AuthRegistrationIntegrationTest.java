@@ -75,7 +75,7 @@ class AuthRegistrationIntegrationTest {
         User user = users.findByEmail("alice@example.com").orElseThrow();
         assertThat(user.isEmailVerified()).isFalse();
         assertThat(emails.sent()).hasSize(1);
-        SentEmail email = emails.sent().get(0);
+        SentEmail email = emails.sent().getFirst();
         assertThat(email.to()).isEqualTo("alice@example.com");
         assertThat(email.template()).isEqualTo(TemplateKey.VERIFY_EMAIL);
         assertThat(email.params().get("link")).contains("/verify-email?token=");
@@ -124,7 +124,7 @@ class AuthRegistrationIntegrationTest {
     @Test
     void verifyEmailWithAValidTokenVerifiesTheUserAndTheTokenWorksOnlyOnce() throws Exception {
         register("erin@example.com");
-        String token = RecordingNotificationApi.tokenFrom(emails.sent().get(0));
+        String token = RecordingNotificationApi.tokenFrom(emails.sent().getFirst());
         String body = "{\"token\":\"" + token + "\"}";
 
         assertThat(postJson("/api/v1/auth/verify-email", body)).isEqualTo(204);
@@ -168,8 +168,21 @@ class AuthRegistrationIntegrationTest {
         assertThat(postJson("/api/v1/auth/resend-verification", "{\"email\":\"gina@example.com\"}")).isEqualTo(202);
 
         assertThat(emails.sent()).hasSize(1);
-        String token = RecordingNotificationApi.tokenFrom(emails.sent().get(0));
+        String token = RecordingNotificationApi.tokenFrom(emails.sent().getFirst());
         assertThat(postJson("/api/v1/auth/verify-email", "{\"token\":\"" + token + "\"}")).isEqualTo(204);
+    }
+
+    @Test
+    void resendingVerificationInvalidatesThePreviousUnusedLink() throws Exception {
+        register("resend@example.com");
+        String oldToken = RecordingNotificationApi.tokenFrom(emails.sent().getFirst());
+        emails.clear();
+
+        assertThat(postJson("/api/v1/auth/resend-verification", "{\"email\":\"resend@example.com\"}")).isEqualTo(202);
+        String newToken = RecordingNotificationApi.tokenFrom(emails.sent().getFirst());
+
+        assertThat(postJson("/api/v1/auth/verify-email", "{\"token\":\"" + oldToken + "\"}")).isEqualTo(400);
+        assertThat(postJson("/api/v1/auth/verify-email", "{\"token\":\"" + newToken + "\"}")).isEqualTo(204);
     }
 
     @Test
@@ -177,7 +190,7 @@ class AuthRegistrationIntegrationTest {
         assertThat(postJson("/api/v1/auth/resend-verification", "{\"email\":\"nobody@example.com\"}")).isEqualTo(202);
 
         register("hana@example.com");
-        String token = RecordingNotificationApi.tokenFrom(emails.sent().get(0));
+        String token = RecordingNotificationApi.tokenFrom(emails.sent().getFirst());
         postJson("/api/v1/auth/verify-email", "{\"token\":\"" + token + "\"}");
         emails.clear();
 

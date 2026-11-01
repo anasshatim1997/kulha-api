@@ -71,24 +71,24 @@ class JdbcRefreshTokenRepository implements RefreshTokenRepository {
     }
 
     @Override
-    public int revokeFamily(UUID familyId, Instant now) {
-        return jdbc.sql("""
-                UPDATE identity.refresh_tokens
-                SET revoked_at = :now
-                WHERE family_id = :familyId AND revoked_at IS NULL
-                """)
+    public void revokeFamily(UUID familyId, Instant now) {
+        jdbc.sql("""
+                        UPDATE identity.refresh_tokens
+                        SET revoked_at = :now
+                        WHERE family_id = :familyId AND revoked_at IS NULL
+                        """)
                 .param("now", toDb(now), Types.TIMESTAMP_WITH_TIMEZONE)
                 .param("familyId", familyId)
                 .update();
     }
 
     @Override
-    public int revokeAllForUser(UUID userId, Instant now) {
-        return jdbc.sql("""
-                UPDATE identity.refresh_tokens
-                SET revoked_at = :now
-                WHERE user_id = :userId AND revoked_at IS NULL
-                """)
+    public void revokeAllForUser(UUID userId, Instant now) {
+        jdbc.sql("""
+                        UPDATE identity.refresh_tokens
+                        SET revoked_at = :now
+                        WHERE user_id = :userId AND revoked_at IS NULL
+                        """)
                 .param("now", toDb(now), Types.TIMESTAMP_WITH_TIMEZONE)
                 .param("userId", userId)
                 .update();

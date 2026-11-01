@@ -2,6 +2,7 @@ package ma.kulha.identity.application;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -70,7 +71,12 @@ public class RegistrationService {
                 users.insert(user);
                 return issueVerificationToken(user.id(), now);
             });
-        } catch (DataIntegrityViolationException alreadyRegistered) {
+        } catch (DataIntegrityViolationException integrityFailure) {
+            if (!isUniqueConstraintViolation(integrityFailure)) {
+                throw integrityFailure;
+            }
+            // The email unique constraint is the race-safe duplicate check. Do not turn unrelated
+            // database constraint failures into a misleading successful registration response.
             log.info("Registration ignored: the email is already registered");
             return;
         }
@@ -101,9 +107,21 @@ public class RegistrationService {
                 .filter(user -> !user.isEmailVerified() && user.status() == UserStatus.ACTIVE)
                 .ifPresent(user -> {
                     Instant now = clock.instant();
-                    String rawToken = tx.execute(status -> issueVerificationToken(user.id(), now));
+                    String rawToken = tx.execute(status -> {
+                        tokens.invalidateUnused(user.id(), EmailTokenType.VERIFY, now);
+                        return issueVerificationToken(user.id(), now);
+                    });
                     sendVerificationEmail(user.email(), rawToken);
                 });
+    }
+
+    private static boolean isUniqueConstraintViolation(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sqlException && "23505".equals(sqlException.getSQLState())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String issueVerificationToken(UUID userId, Instant now) {

@@ -63,8 +63,8 @@ class PasswordResetIntegrationTest {
 
     // ---------- helpers ----------
 
-    private User createUser(String email) {
-        User user = User.register(email, passwordEncoder.encode(OLD_PASSWORD), "Test User", null, Instant.now());
+    private User createUser() {
+        User user = User.register(PasswordResetIntegrationTest.EMAIL, passwordEncoder.encode(OLD_PASSWORD), "Test User", null, Instant.now());
         users.insert(user);
         users.markEmailVerified(user.id(), Instant.now());
         return users.findById(user.id()).orElseThrow();
@@ -89,30 +89,30 @@ class PasswordResetIntegrationTest {
                 "{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, password));
     }
 
-    private static String field(MockHttpServletResponse response, String name) throws Exception {
+    private static String field(MockHttpServletResponse response) throws Exception {
         String body = response.getContentAsString();
-        Matcher matcher = Pattern.compile("\"" + name + "\"\\s*:\\s*\"([^\"]*)\"").matcher(body);
-        assertThat(matcher.find()).as("field '%s' in response: %s", name, body).isTrue();
+        Matcher matcher = Pattern.compile("\"" + "refreshToken" + "\"\\s*:\\s*\"([^\"]*)\"").matcher(body);
+        assertThat(matcher.find()).as("field '%s' in response: %s", "refreshToken", body).isTrue();
         return matcher.group(1);
     }
 
     private String lastResetToken() {
         var sent = emails.sent();
-        return RecordingNotificationApi.tokenFrom(sent.get(sent.size() - 1));
+        return RecordingNotificationApi.tokenFrom(sent.getLast());
     }
 
     // ---------- request ----------
 
     @Test
     void forgotPasswordForAnExistingUserSendsAResetEmail() throws Exception {
-        createUser(EMAIL);
+        createUser();
 
         assertThat(forgot(EMAIL).getStatus()).isEqualTo(202);
 
         assertThat(emails.sent()).hasSize(1);
-        assertThat(emails.sent().get(0).to()).isEqualTo(EMAIL);
-        assertThat(emails.sent().get(0).template()).isEqualTo(TemplateKey.RESET_PASSWORD);
-        assertThat(emails.sent().get(0).params().get("link")).contains("/reset-password?token=");
+        assertThat(emails.sent().getFirst().to()).isEqualTo(EMAIL);
+        assertThat(emails.sent().getFirst().template()).isEqualTo(TemplateKey.RESET_PASSWORD);
+        assertThat(emails.sent().getFirst().params().get("link")).contains("/reset-password?token=");
     }
 
     @Test
@@ -126,7 +126,7 @@ class PasswordResetIntegrationTest {
 
     @Test
     void resetPasswordChangesThePasswordAndTheTokenWorksOnlyOnce() throws Exception {
-        createUser(EMAIL);
+        createUser();
         forgot(EMAIL);
         String token = lastResetToken();
 
@@ -134,15 +134,15 @@ class PasswordResetIntegrationTest {
 
         assertThat(login(EMAIL, NEW_PASSWORD).getStatus()).isEqualTo(200);
         assertThat(login(EMAIL, OLD_PASSWORD).getStatus()).isEqualTo(401);
-        assertThat(emails.sent().get(emails.sent().size() - 1).template()).isEqualTo(TemplateKey.PASSWORD_CHANGED);
+        assertThat(emails.sent().getLast().template()).isEqualTo(TemplateKey.PASSWORD_CHANGED);
 
         assertThat(reset(token, "yet-another-password-789").getStatus()).isEqualTo(400);
     }
 
     @Test
     void resetPasswordClosesAllExistingSessions() throws Exception {
-        createUser(EMAIL);
-        String refreshToken = field(login(EMAIL, OLD_PASSWORD), "refreshToken");
+        createUser();
+        String refreshToken = field(login(EMAIL, OLD_PASSWORD));
         forgot(EMAIL);
 
         assertThat(reset(lastResetToken(), NEW_PASSWORD).getStatus()).isEqualTo(204);
@@ -153,7 +153,7 @@ class PasswordResetIntegrationTest {
 
     @Test
     void resetPasswordWithAnExpiredTokenReturns400() throws Exception {
-        User user = createUser(EMAIL);
+        User user = createUser();
         String raw = OpaqueTokens.generate();
         jdbc.sql("""
                 INSERT INTO identity.email_tokens (id, user_id, type, token_hash, expires_at)
@@ -175,7 +175,7 @@ class PasswordResetIntegrationTest {
 
     @Test
     void resetPasswordWithATooShortPasswordReturns400AndKeepsTheTokenUsable() throws Exception {
-        createUser(EMAIL);
+        createUser();
         forgot(EMAIL);
         String token = lastResetToken();
 
@@ -189,7 +189,7 @@ class PasswordResetIntegrationTest {
         postJson("/api/v1/auth/register", """
                 {"email":"%s","password":"%s","fullName":"Test User"}
                 """.formatted("fresh@example.com", OLD_PASSWORD));
-        String verificationToken = RecordingNotificationApi.tokenFrom(emails.sent().get(0));
+        String verificationToken = RecordingNotificationApi.tokenFrom(emails.sent().getFirst());
 
         assertThat(reset(verificationToken, NEW_PASSWORD).getStatus()).isEqualTo(400);
         assertThat(login("fresh@example.com", OLD_PASSWORD).getStatus()).isEqualTo(200);
@@ -197,7 +197,7 @@ class PasswordResetIntegrationTest {
 
     @Test
     void aNewResetRequestCancelsThePreviousLink() throws Exception {
-        createUser(EMAIL);
+        createUser();
         forgot(EMAIL);
         String firstToken = lastResetToken();
         forgot(EMAIL);

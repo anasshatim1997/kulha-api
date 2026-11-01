@@ -6,9 +6,9 @@ import java.util.UUID;
 
 /**
  * A merchant (shop) and its approval status. Immutable: every change returns a new instance.
- *
+ * <p>
  * Status rules:
- * PENDING  -> APPROVED (approve) or REJECTED (reject, with a reason)
+ * PENDING -> APPROVED (approve) or REJECTED (reject, with a reason)
  * APPROVED -> SUSPENDED (suspend, with a reason)
  * SUSPENDED -> APPROVED (approve again)
  * REJECTED -> PENDING when the owner corrects the profile and resubmits

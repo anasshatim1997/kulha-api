@@ -66,7 +66,7 @@ public class MerchantService {
     public Merchant updateOwn(UUID userId, Merchant.Profile profile) {
         Merchant current = getOwn(userId);
         Merchant updated = current.withProfile(profile, clock.instant());
-        if (!merchants.updateIfStatus(updated, current.status())) {
+        if (merchants.updateIfStatus(updated, current.status())) {
             throw new InvalidMerchantStateException("The merchant was changed meanwhile. Reload and try again.");
         }
         return updated;
@@ -114,7 +114,7 @@ public class MerchantService {
         Merchant updated = tx.execute(status -> {
             Merchant current = merchants.findById(merchantId).orElseThrow(MerchantNotFoundException::new);
             Merchant next = transition.apply(current, now);
-            if (!merchants.updateIfStatus(next, current.status())) {
+            if (merchants.updateIfStatus(next, current.status())) {
                 throw new InvalidMerchantStateException("The merchant was changed by someone else. Reload and try again.");
             }
             roleChange.accept(next.ownerUserId());

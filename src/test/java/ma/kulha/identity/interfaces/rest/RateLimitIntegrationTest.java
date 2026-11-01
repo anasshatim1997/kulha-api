@@ -16,6 +16,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
+import java.util.Objects;
+
 /**
  * Runs with the rate limiter switched on (it is off in all other tests).
  * Every test uses its own IP addresses and emails, because the counters live as long as this context.
@@ -61,7 +63,7 @@ class RateLimitIntegrationTest {
         MockHttpServletResponse limited = loginFrom(ip, "ip-limit-extra@example.com");
 
         assertThat(limited.getStatus()).isEqualTo(429);
-        assertThat(Long.parseLong(limited.getHeader("Retry-After"))).isPositive();
+        assertThat(Long.parseLong(Objects.requireNonNull(limited.getHeader("Retry-After")))).isPositive();
         // Another address is not affected.
         assertThat(loginFrom("10.1.0.2", "someone@example.com").getStatus()).isEqualTo(401);
     }
@@ -75,7 +77,7 @@ class RateLimitIntegrationTest {
         MockHttpServletResponse limited = loginFrom("10.2.0.99", "victim@example.com");
 
         assertThat(limited.getStatus()).isEqualTo(429);
-        assertThat(Long.parseLong(limited.getHeader("Retry-After"))).isPositive();
+        assertThat(Long.parseLong(Objects.requireNonNull(limited.getHeader("Retry-After")))).isPositive();
         // Other accounts are not affected.
         assertThat(loginFrom("10.2.0.100", "someone-else@example.com").getStatus()).isEqualTo(401);
     }

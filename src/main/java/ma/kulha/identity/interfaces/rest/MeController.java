@@ -1,5 +1,6 @@
 package ma.kulha.identity.interfaces.rest;
 
+import java.util.Objects;
 import java.util.UUID;
 import ma.kulha.identity.application.AccountService;
 import ma.kulha.identity.interfaces.dto.MeResponse;
@@ -21,7 +22,7 @@ public class MeController {
 
     @GetMapping("/api/v1/me")
     MeResponse me(@AuthenticationPrincipal Jwt jwt) {
-        UUID userId = UUID.fromString(jwt.getSubject());
+        UUID userId = UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
         return accounts.findById(userId)
                 .map(MeResponse::from)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));

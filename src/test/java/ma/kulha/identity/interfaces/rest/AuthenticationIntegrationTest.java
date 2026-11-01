@@ -112,9 +112,9 @@ class AuthenticationIntegrationTest {
         return matcher.group(1);
     }
 
-    private String accessTokenFor(String email) throws Exception {
-        createUser(email);
-        return field(login(email, PASSWORD), "accessToken");
+    private String accessTokenFor() throws Exception {
+        createUser(AuthenticationIntegrationTest.EMAIL);
+        return field(login(AuthenticationIntegrationTest.EMAIL, PASSWORD), "accessToken");
     }
 
     private static String encode(JwtEncoder encoder, String issuer, String audience,
@@ -183,7 +183,7 @@ class AuthenticationIntegrationTest {
 
     @Test
     void meWithAValidAccessTokenReturnsTheProfile() throws Exception {
-        String token = accessTokenFor(EMAIL);
+        String token = accessTokenFor();
 
         MockHttpServletResponse response = getWithToken("/api/v1/me", token);
 
@@ -196,7 +196,7 @@ class AuthenticationIntegrationTest {
 
     @Test
     void rolesComeFromTheDatabaseSoARoleChangeAppliesToTheSameToken() throws Exception {
-        String token = accessTokenFor(EMAIL);
+        String token = accessTokenFor();
         User user = users.findByEmail(EMAIL).orElseThrow();
         assertThat(getWithToken("/api/v1/me", token).getContentAsString()).doesNotContain("MERCHANT");
 
@@ -280,7 +280,7 @@ class AuthenticationIntegrationTest {
 
     @Test
     void theAccessTokenContainsNoPersonalData() throws Exception {
-        String token = accessTokenFor(EMAIL);
+        String token = accessTokenFor();
 
         String payload = new String(Base64.getUrlDecoder().decode(token.split("\\.")[1]), StandardCharsets.UTF_8);
 
@@ -289,7 +289,7 @@ class AuthenticationIntegrationTest {
 
     @Test
     void anAuthenticatedUserStillCannotReachRoutesThatAreNotOpened() throws Exception {
-        String token = accessTokenFor(EMAIL);
+        String token = accessTokenFor();
 
         assertThat(getWithToken("/api/v1/anything", token).getStatus()).isEqualTo(403);
     }
