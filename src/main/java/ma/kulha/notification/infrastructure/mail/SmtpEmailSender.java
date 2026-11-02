@@ -1,12 +1,15 @@
 package ma.kulha.notification.infrastructure.mail;
 
+import java.nio.charset.StandardCharsets;
 import ma.kulha.notification.application.EmailSender;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -23,16 +26,18 @@ class SmtpEmailSender implements EmailSender {
     }
 
     @Override
-    public void send(String to, String subject, String body) {
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(from);
-        message.setTo(to);
-        message.setSubject(subject);
-        message.setText(body);
+    public void send(String to, String subject, String textBody, String htmlBody) {
         try {
-            mailSender.send(message);
-        } catch (MailException e) {
-            // Never log the body: it can contain a one-time link.
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper message = new MimeMessageHelper(
+                    mimeMessage, true, StandardCharsets.UTF_8.name());
+            message.setFrom(from);
+            message.setTo(to);
+            message.setSubject(subject);
+            message.setText(textBody, htmlBody);
+            mailSender.send(mimeMessage);
+        } catch (MailException | MessagingException e) {
+            // Never log either body: transactional emails can contain one-time credentials.
             log.error("Email delivery failed (subject: {}): {}", subject, e.getClass().getSimpleName());
         }
     }

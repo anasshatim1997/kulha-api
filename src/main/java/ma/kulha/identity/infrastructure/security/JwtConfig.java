@@ -19,6 +19,7 @@ import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
@@ -98,6 +99,7 @@ class JwtConfig {
 
     /** Accepts only RS256 tokens signed by our key, with the right issuer, audience and valid time window. */
     @Bean
+    @Primary
     JwtDecoder jwtDecoder(RSAKey jwtSigningKey,
                           @Value("${app.security.jwt.issuer:kulha-api}") String issuer,
                           @Value("${app.security.jwt.audience:kulha-clients}") String audience) throws JOSEException {

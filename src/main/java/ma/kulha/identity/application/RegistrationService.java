@@ -132,7 +132,7 @@ public class RegistrationService {
     }
 
     private void sendVerificationEmail(String email, String rawToken) {
-        String link = webBaseUrl + "/verify-email?token=" + rawToken;
+        String link = webBaseUrl + "/verify-email#token=" + rawToken;
         notifications.sendEmail(email, TemplateKey.VERIFY_EMAIL, Map.of("link", link));
     }
 }

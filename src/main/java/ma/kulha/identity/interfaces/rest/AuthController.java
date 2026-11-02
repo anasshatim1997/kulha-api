@@ -2,10 +2,12 @@ package ma.kulha.identity.interfaces.rest;
 
 import jakarta.validation.Valid;
 import ma.kulha.identity.application.AuthenticationService;
+import ma.kulha.identity.application.GoogleAuthenticationService;
 import ma.kulha.identity.application.PasswordResetService;
 import ma.kulha.identity.application.RegisterCommand;
 import ma.kulha.identity.application.RegistrationService;
 import ma.kulha.identity.interfaces.dto.ForgotPasswordRequest;
+import ma.kulha.identity.interfaces.dto.GoogleLoginRequest;
 import ma.kulha.identity.interfaces.dto.LoginRequest;
 import ma.kulha.identity.interfaces.dto.RefreshRequest;
 import ma.kulha.identity.interfaces.dto.RegisterRequest;
@@ -26,13 +28,16 @@ public class AuthController {
     private final RegistrationService registration;
     private final AuthenticationService authentication;
     private final PasswordResetService passwordReset;
+    private final GoogleAuthenticationService googleAuthentication;
 
     AuthController(RegistrationService registration,
                    AuthenticationService authentication,
-                   PasswordResetService passwordReset) {
+                   PasswordResetService passwordReset,
+                   GoogleAuthenticationService googleAuthentication) {
         this.registration = registration;
         this.authentication = authentication;
         this.passwordReset = passwordReset;
+        this.googleAuthentication = googleAuthentication;
     }
 
     /** Always 202: the response never reveals whether the email was already registered. */
@@ -59,6 +64,12 @@ public class AuthController {
     @PostMapping("/login")
     TokenResponse login(@Valid @RequestBody LoginRequest request) {
         return TokenResponse.from(authentication.login(request.email(), request.password()));
+    }
+
+    @PostMapping("/google")
+    TokenResponse googleLogin(@Valid @RequestBody GoogleLoginRequest request,
+                              @org.springframework.web.bind.annotation.RequestHeader(value = "X-Kulha-Bff-Secret", required = false) String bffSecret) {
+        return TokenResponse.from(googleAuthentication.login(request.idToken(), request.nonce(), bffSecret));
     }
 
     @PostMapping("/refresh")

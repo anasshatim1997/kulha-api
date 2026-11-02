@@ -214,9 +214,23 @@ openssl pkey -pubin -in jwt-public.pem -outform DER | openssl base64 -A > jwt-pu
 
 Store the contents of the two `.b64` files in your secret manager as the corresponding environment variables. Never commit the PEM or `.b64` key files. The API checks that the public and private keys match at startup. This version supports one active signing key; replacing it invalidates old access tokens.
 
-## Google OAuth / OIDC status
+## BFF client IP and authentication rate limits
 
-Google sign-in is not implemented in this backend yet. The current `spring-boot-starter-oauth2-resource-server` dependency validates KULHA-issued bearer JWTs; it does not provide Google login. The accepted identity ADR (`docs/adr/002-identity-provider.md`) deliberately selects first-party email/password authentication for the pilot. Do not enable a frontend Google button pointing at `/oauth2/authorization/google` until an OAuth2 client, OIDC callback/account-linking flow, and token handoff have been implemented and tested. See `docs/security/API_SECURITY_REVIEW_2026-11-01.md`.
+The API accepts `X-Kulha-Client-IP` only when `X-Kulha-Bff-Secret` matches `KULHA_BFF_SHARED_SECRET`; comparisons use a constant-time byte comparison. Otherwise, rate limits use the servlet remote address. Set the same long random `KULHA_BFF_SHARED_SECRET` in the API and web environments.
+
+The Next.js app reads the client address only from `X-Real-IP`, supplied by the trusted reverse proxy. Configure that proxy to **remove any incoming client-supplied `X-Real-IP` and overwrite it with the actual connecting client IP**; do not expose Next.js directly in a way that bypasses this proxy. Never derive the rate-limit identity from browser-supplied `X-Forwarded-For` or `X-Kulha-*` headers.
+
+## SMTP configuration and timeouts
+
+SMTP connections use bounded connect/read/write timeouts (5,000 / 8,000 / 8,000 ms by default). Override them with `MAIL_SMTP_CONNECTION_TIMEOUT`, `MAIL_SMTP_TIMEOUT`, and `MAIL_SMTP_WRITE_TIMEOUT` when needed. Local Mailpit may run without STARTTLS; **staging and production must set both `MAIL_SMTP_STARTTLS=true` and `MAIL_SMTP_STARTTLS_REQUIRED=true`** and configure a mail provider that supports STARTTLS. Server certificate identity verification is enabled.
+
+## Google OAuth / OIDC sign-in
+
+Google sign-in is implemented as a BFF-mediated OIDC authorization-code flow with PKCE. The Next.js server owns the client secret, callback, signed state cookie, PKCE verifier and nonce. The API independently validates the Google ID-token signature against Google's JWKS, issuer, audience, expiry, verified-email claim and nonce before creating or linking an identity. Provider subjects are stored in `identity.external_identities`; email/password authentication and the existing KULHA refresh-token session remain unchanged.
+
+Configure `GOOGLE_OAUTH_CLIENT_ID` in the API and the matching `GOOGLE_CLIENT_ID` plus `GOOGLE_CLIENT_SECRET` in the web server environment. Register the exact web callback URI (default local URI: `http://localhost:3000/api/auth/google/callback`) in Google Cloud. Both services must share the same non-empty `KULHA_BFF_SHARED_SECRET`. The API rejects direct Google-login requests without that secret. Google sign-in returns 503 until the client ID and BFF secret are configured. Never expose the client secret as a `NEXT_PUBLIC_*` variable.
+
+A Google-verified email can link to an existing active account with the same normalized email; disabled accounts are never reactivated. A new Google account receives only the standard `CUSTOMER` role. Provider access/refresh tokens are not persisted.
 
 ## Security baseline
 
@@ -270,3 +284,8 @@ Microservice deployments, Kubernetes, native mobile app, delivery, wallet or loy
 ## Confidentiality
 
 Private repository. Confidential to the founders and project team.
+## Account and shop-owner onboarding
+
+Customer and shop-owner accounts use the same email-verified identity flow. A verified user submits a business profile through `POST /api/v1/merchants/apply`; the application starts in `PENDING` and the owner receives merchant permissions only after an administrator approves it. Rejected applications may be corrected through `PUT /api/v1/merchants/me` and return to `PENDING`.
+
+Verification and password-reset links place their single-use token in the URL fragment (`#token=...`). The browser fragment is not sent in HTTP requests; the web client reads it into memory and removes it from the address bar before the user explicitly confirms the action. HTML emails render these links as branded action buttons, while the plain-text alternative does not print the token URL.

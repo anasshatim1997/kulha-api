@@ -112,7 +112,7 @@ class PasswordResetIntegrationTest {
         assertThat(emails.sent()).hasSize(1);
         assertThat(emails.sent().getFirst().to()).isEqualTo(EMAIL);
         assertThat(emails.sent().getFirst().template()).isEqualTo(TemplateKey.RESET_PASSWORD);
-        assertThat(emails.sent().getFirst().params().get("link")).contains("/reset-password?token=");
+        assertThat(emails.sent().getFirst().params().get("link")).contains("/reset-password#token=");
     }
 
     @Test

@@ -78,7 +78,7 @@ class AuthRegistrationIntegrationTest {
         SentEmail email = emails.sent().getFirst();
         assertThat(email.to()).isEqualTo("alice@example.com");
         assertThat(email.template()).isEqualTo(TemplateKey.VERIFY_EMAIL);
-        assertThat(email.params().get("link")).contains("/verify-email?token=");
+        assertThat(email.params().get("link")).contains("/verify-email#token=");
     }
 
     @Test

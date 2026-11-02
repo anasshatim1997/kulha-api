@@ -72,6 +72,15 @@ public class AuthenticationService {
         return tx.execute(status -> issuePair(user, UUID.randomUUID(), null, now));
     }
 
+    /** Issues the existing KULHA session format for a previously verified external identity. */
+    public TokenPair issueExternalLogin(User user) {
+        if (user.status() != UserStatus.ACTIVE) {
+            throw new InvalidCredentialsException();
+        }
+        Instant now = clock.instant();
+        return tx.execute(status -> issuePair(user, UUID.randomUUID(), null, now));
+    }
+
     /**
      * Exchanges a refresh token for a new pair. The old token is revoked, so each token works once.
      * If a token that was already used shows up again, someone may have copied it: the whole family

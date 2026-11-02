@@ -79,7 +79,7 @@ public class PasswordResetService {
                                 OpaqueTokens.hash(token), now.plus(RESET_TOKEN_TTL), now);
                         return token;
                     });
-                    String link = webBaseUrl + "/reset-password?token=" + rawToken;
+                    String link = webBaseUrl + "/reset-password#token=" + rawToken;
                     notifications.sendEmail(user.email(), TemplateKey.RESET_PASSWORD, Map.of("link", link));
                 });
     }

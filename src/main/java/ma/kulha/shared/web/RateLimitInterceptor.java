@@ -3,18 +3,24 @@ package ma.kulha.shared.web;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.Map;
 import ma.kulha.shared.ratelimit.RateLimitResult;
 import ma.kulha.shared.ratelimit.RateLimiter;
 import org.jspecify.annotations.NonNull;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 /**
  * Per-IP limits on the public authentication endpoints. Account-level limits live in the services.
- * Behind a reverse proxy, the real client address must be configured (see PLAN.md, step D2),
- * otherwise every user shares the proxy's address.
+ * The BFF client-IP header is trusted only when accompanied by the configured shared secret;
+ * otherwise the servlet's remote address is used. See the deployment README for proxy requirements.
  */
 @Component
 class RateLimitInterceptor implements HandlerInterceptor {
@@ -24,6 +30,7 @@ class RateLimitInterceptor implements HandlerInterceptor {
 
     private static final Map<String, Rule> RULES = Map.of(
             "/api/v1/auth/login", new Rule("login", 10, Duration.ofMinutes(1)),
+            "/api/v1/auth/google", new Rule("google-login", 10, Duration.ofMinutes(1)),
             "/api/v1/auth/refresh", new Rule("refresh", 30, Duration.ofMinutes(1)),
             "/api/v1/auth/register", new Rule("register", 10, Duration.ofHours(1)),
             "/api/v1/auth/verify-email", new Rule("verify-email", 20, Duration.ofHours(1)),
@@ -31,10 +38,62 @@ class RateLimitInterceptor implements HandlerInterceptor {
             "/api/v1/auth/forgot-password", new Rule("forgot-password", 5, Duration.ofHours(1)),
             "/api/v1/auth/reset-password", new Rule("reset-password", 10, Duration.ofHours(1)));
 
-    private final RateLimiter limiter;
+    private static final String CLIENT_IP_HEADER = "X-Kulha-Client-IP";
+    private static final String BFF_SECRET_HEADER = "X-Kulha-Bff-Secret";
 
-    RateLimitInterceptor(RateLimiter limiter) {
+    private final RateLimiter limiter;
+    private final byte[] expectedBffSecret;
+
+    RateLimitInterceptor(RateLimiter limiter,
+                         @Value("${app.rate-limit.bff-secret:}") String bffSecret) {
         this.limiter = limiter;
+        this.expectedBffSecret = bffSecret.getBytes(StandardCharsets.UTF_8);
+    }
+
+    private String trustedClientIp(HttpServletRequest request) {
+        String suppliedIp = request.getHeader(CLIENT_IP_HEADER);
+        String suppliedSecret = request.getHeader(BFF_SECRET_HEADER);
+        if (expectedBffSecret.length > 0 && suppliedSecret != null
+                && MessageDigest.isEqual(expectedBffSecret, suppliedSecret.getBytes(StandardCharsets.UTF_8))) {
+            String validated = validateIp(suppliedIp);
+            if (validated != null) {
+                return validated;
+            }
+        }
+        return request.getRemoteAddr();
+    }
+
+    private static String validateIp(String value) {
+        if (value == null || value.isBlank() || value.length() > 45
+                || !value.equals(value.trim()) || value.indexOf('%') >= 0) {
+            return null;
+        }
+        if (value.indexOf(':') >= 0) {
+            try {
+                InetAddress address = InetAddress.getByName(value);
+                return address instanceof Inet6Address ? address.getHostAddress() : null;
+            } catch (UnknownHostException invalid) {
+                return null;
+            }
+        }
+        String[] octets = value.split("\\.", -1);
+        if (octets.length != 4) {
+            return null;
+        }
+        for (String octet : octets) {
+            if (octet.isEmpty() || !octet.chars().allMatch(c -> c >= '0' && c <= '9')
+                    || (octet.length() > 1 && octet.charAt(0) == '0')) {
+                return null;
+            }
+            try {
+                if (Integer.parseInt(octet) > 255) {
+                    return null;
+                }
+            } catch (NumberFormatException invalid) {
+                return null;
+            }
+        }
+        return String.join(".", octets);
     }
 
     @Override
@@ -47,8 +106,9 @@ class RateLimitInterceptor implements HandlerInterceptor {
         if (rule == null) {
             return true;
         }
+        String clientIp = trustedClientIp(request);
         RateLimitResult result = limiter.tryAcquire(
-                "ip:" + rule.name() + ":" + request.getRemoteAddr(), rule.maxRequests(), rule.window());
+                "ip:" + rule.name() + ":" + clientIp, rule.maxRequests(), rule.window());
         if (result.allowed()) {
             return true;
         }

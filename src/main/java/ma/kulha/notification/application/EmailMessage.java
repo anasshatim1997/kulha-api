@@ -1,4 +1,5 @@
 package ma.kulha.notification.application;
 
-record EmailMessage(String subject, String body) {
+/** A multipart email with a readable text fallback and a branded HTML presentation. */
+record EmailMessage(String subject, String body, String htmlBody) {
 }

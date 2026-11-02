@@ -15,6 +15,6 @@ class NotificationService implements NotificationApi {
     @Override
     public void sendEmail(String to, TemplateKey template, Map<String, String> params) {
         EmailMessage message = EmailTemplates.render(template, params);
-        sender.send(to, message.subject(), message.body());
+        sender.send(to, message.subject(), message.body(), message.htmlBody());
     }
 }

@@ -43,3 +43,8 @@ The uploaded source archive contained a local `.env` file, although Git confirms
 - Maven wrapper could not download Maven 3.10.0 in this environment, so a fresh `mvnw clean verify` could not be run here.
 - The uploaded archive contained Surefire XML reports for 113 tests with zero recorded failures/errors, but those are pre-existing reports from the supplied build, not a fresh test execution by this review.
 - New Java source is checked separately with `javac` against the dependencies embedded in the provided Spring Boot executable JAR where possible; full Maven/CI verification remains required after you extract the project.
+
+
+## Follow-up after the review — 2026-11-01
+
+The findings above describe the repository at the time of Review #1. Following the founder's scope correction, Google OIDC sign-in has since been added in ADR-003 with a BFF authorization-code + PKCE flow, API-side Google ID-token verification, stable provider-subject persistence and KULHA token handoff. The implementation is not yet considered verified: run the API and web CI suites and the OAuth negative/positive scenarios listed in ADR-003 before enabling credentials in staging or production.

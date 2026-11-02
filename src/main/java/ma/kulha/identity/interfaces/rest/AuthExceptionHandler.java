@@ -3,6 +3,7 @@ package ma.kulha.identity.interfaces.rest;
 import ma.kulha.identity.application.InvalidCredentialsException;
 import ma.kulha.identity.application.InvalidRefreshTokenException;
 import ma.kulha.identity.application.InvalidTokenException;
+import ma.kulha.identity.application.GoogleSignInUnavailableException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -24,6 +25,14 @@ class AuthExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.UNAUTHORIZED, "Invalid email or password.");
         problem.setTitle("Authentication failed");
+        return problem;
+    }
+
+    @ExceptionHandler(GoogleSignInUnavailableException.class)
+    ProblemDetail googleSignInUnavailable() {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.SERVICE_UNAVAILABLE, "Google sign-in is not configured.");
+        problem.setTitle("Sign-in unavailable");
         return problem;
     }
 
