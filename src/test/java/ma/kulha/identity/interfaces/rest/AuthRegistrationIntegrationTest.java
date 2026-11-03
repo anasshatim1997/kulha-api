@@ -6,6 +6,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import ma.kulha.identity.application.OpaqueTokens;
 import ma.kulha.identity.domain.model.User;
 import ma.kulha.identity.domain.repository.UserRepository;
@@ -20,6 +22,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -56,6 +59,16 @@ class AuthRegistrationIntegrationTest {
     private int postJson(String path, String json) throws Exception {
         return mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(json))
                 .andReturn().getResponse().getStatus();
+    }
+
+    private MockHttpServletResponse postResponse(String path, String json) throws Exception {
+        return mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(json)).andReturn().getResponse();
+    }
+
+    private static String jsonField(MockHttpServletResponse response, String name) throws Exception {
+        Matcher matcher = Pattern.compile("\"" + name + "\"\\s*:\\s*\"([^\"]*)\"").matcher(response.getContentAsString());
+        assertThat(matcher.find()).as("field '%s' in response: %s", name, response.getContentAsString()).isTrue();
+        return matcher.group(1);
     }
 
     private int register(String email) throws Exception {
@@ -127,10 +140,43 @@ class AuthRegistrationIntegrationTest {
         String token = RecordingNotificationApi.tokenFrom(emails.sent().getFirst());
         String body = "{\"token\":\"" + token + "\"}";
 
-        assertThat(postJson("/api/v1/auth/verify-email", body)).isEqualTo(204);
+        assertThat(postJson("/api/v1/auth/verify-email", body)).isEqualTo(200);
         assertThat(users.findByEmail("erin@example.com").orElseThrow().isEmailVerified()).isTrue();
 
         assertThat(postJson("/api/v1/auth/verify-email", body)).isEqualTo(400);
+    }
+
+    @Test
+    void verifyEmailSignsThePersonInWithAWorkingTokenPair() throws Exception {
+        register("iris@example.com");
+        String token = RecordingNotificationApi.tokenFrom(emails.sent().getFirst());
+
+        MockHttpServletResponse response = postResponse("/api/v1/auth/verify-email", "{\"token\":\"" + token + "\"}");
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(jsonField(response, "tokenType")).isEqualTo("Bearer");
+        String accessToken = jsonField(response, "accessToken");
+        String refreshToken = jsonField(response, "refreshToken");
+
+        MockHttpServletResponse me = mvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + accessToken))
+                .andReturn().getResponse();
+        assertThat(me.getStatus()).isEqualTo(200);
+        assertThat(me.getContentAsString()).contains("iris@example.com");
+
+        assertThat(postJson("/api/v1/auth/refresh", "{\"refreshToken\":\"" + refreshToken + "\"}")).isEqualTo(200);
+    }
+
+    @Test
+    void verifyEmailConfirmsADisabledAccountButIssuesNoSession() throws Exception {
+        register("jade@example.com");
+        String token = RecordingNotificationApi.tokenFrom(emails.sent().getFirst());
+        jdbc.sql("UPDATE identity.users SET status = 'DISABLED' WHERE email = 'jade@example.com'").update();
+
+        MockHttpServletResponse response = postResponse("/api/v1/auth/verify-email", "{\"token\":\"" + token + "\"}");
+
+        assertThat(response.getStatus()).isEqualTo(204);
+        assertThat(response.getContentAsString()).isEmpty();
+        assertThat(users.findByEmail("jade@example.com").orElseThrow().isEmailVerified()).isTrue();
     }
 
     @Test
@@ -169,7 +215,7 @@ class AuthRegistrationIntegrationTest {
 
         assertThat(emails.sent()).hasSize(1);
         String token = RecordingNotificationApi.tokenFrom(emails.sent().getFirst());
-        assertThat(postJson("/api/v1/auth/verify-email", "{\"token\":\"" + token + "\"}")).isEqualTo(204);
+        assertThat(postJson("/api/v1/auth/verify-email", "{\"token\":\"" + token + "\"}")).isEqualTo(200);
     }
 
     @Test
@@ -182,7 +228,7 @@ class AuthRegistrationIntegrationTest {
         String newToken = RecordingNotificationApi.tokenFrom(emails.sent().getFirst());
 
         assertThat(postJson("/api/v1/auth/verify-email", "{\"token\":\"" + oldToken + "\"}")).isEqualTo(400);
-        assertThat(postJson("/api/v1/auth/verify-email", "{\"token\":\"" + newToken + "\"}")).isEqualTo(204);
+        assertThat(postJson("/api/v1/auth/verify-email", "{\"token\":\"" + newToken + "\"}")).isEqualTo(200);
     }
 
     @Test

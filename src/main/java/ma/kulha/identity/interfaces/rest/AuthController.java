@@ -1,11 +1,14 @@
 package ma.kulha.identity.interfaces.rest;
 
 import jakarta.validation.Valid;
+import java.util.Optional;
+import java.util.UUID;
 import ma.kulha.identity.application.AuthenticationService;
 import ma.kulha.identity.application.GoogleAuthenticationService;
 import ma.kulha.identity.application.PasswordResetService;
 import ma.kulha.identity.application.RegisterCommand;
 import ma.kulha.identity.application.RegistrationService;
+import ma.kulha.identity.application.TokenPair;
 import ma.kulha.identity.interfaces.dto.ForgotPasswordRequest;
 import ma.kulha.identity.interfaces.dto.GoogleLoginRequest;
 import ma.kulha.identity.interfaces.dto.LoginRequest;
@@ -48,10 +51,19 @@ public class AuthController {
         return ResponseEntity.accepted().build();
     }
 
+    /**
+     * Confirms the email address and signs the person in: 200 with the usual token pair. When the account
+     * cannot sign in (for example it is disabled) the address is still confirmed, but the answer is 204
+     * and no session is issued. A bad, used or expired link is 400.
+     */
     @PostMapping("/verify-email")
-    ResponseEntity<Void> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
-        registration.verifyEmail(request.token());
-        return ResponseEntity.noContent().build();
+    ResponseEntity<TokenResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        UUID userId = registration.verifyEmail(request.token());
+        Optional<TokenPair> session = authentication.issueSessionAfterEmailVerification(userId);
+        if (session.isEmpty()) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(TokenResponse.from(session.get()));
     }
 
     /** Always 202, whether or not the account exists. */

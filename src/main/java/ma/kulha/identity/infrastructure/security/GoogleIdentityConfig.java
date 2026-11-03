@@ -1,6 +1,6 @@
 package ma.kulha.identity.infrastructure.security;
 
-import java.util.List;
+import java.util.Collection;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,7 +25,8 @@ class GoogleIdentityConfig {
         OAuth2TokenValidator<Jwt> defaults = JwtValidators.createDefault();
         OAuth2TokenValidator<Jwt> issuer = new JwtClaimValidator<String>(
                 "iss", value -> "https://accounts.google.com".equals(value) || "accounts.google.com".equals(value));
-        OAuth2TokenValidator<Jwt> audience = new JwtClaimValidator<List<String>>(
+        // Google sends "aud" as a single string; Spring turns it into a collection. Any collection is fine here.
+        OAuth2TokenValidator<Jwt> audience = new JwtClaimValidator<Collection<String>>(
                 "aud", values -> !clientId.isBlank() && values != null && values.contains(clientId));
         return new DelegatingOAuth2TokenValidator<>(defaults, issuer, audience);
     }

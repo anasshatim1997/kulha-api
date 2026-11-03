@@ -83,13 +83,17 @@ public class RegistrationService {
         sendVerificationEmail(user.email(), rawToken);
     }
 
-    /** Verifies the email behind a token. A token works once. */
-    public void verifyEmail(String rawToken) {
+    /**
+     * Verifies the email behind a token and returns the id of its owner, so the caller can sign them in.
+     * A token works once.
+     */
+    public UUID verifyEmail(String rawToken) {
         Instant now = clock.instant();
-        tx.executeWithoutResult(status -> {
+        return tx.execute(status -> {
             UUID userId = tokens.consume(OpaqueTokens.hash(rawToken), EmailTokenType.VERIFY, now)
                     .orElseThrow(InvalidTokenException::new);
             users.markEmailVerified(userId, now);
+            return userId;
         });
     }
 

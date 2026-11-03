@@ -3,6 +3,7 @@ package ma.kulha.identity.application;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 import ma.kulha.identity.domain.model.RefreshTokenRecord;
 import ma.kulha.identity.domain.model.User;
@@ -79,6 +80,18 @@ public class AuthenticationService {
         }
         Instant now = clock.instant();
         return tx.execute(status -> issuePair(user, UUID.randomUUID(), null, now));
+    }
+
+    /**
+     * Signs a person in right after they proved control of their mailbox with a one-time email token
+     * (the same trust as a magic link). Returns empty when the account cannot sign in, for example
+     * because it was disabled, so the caller confirms the address without issuing a session.
+     */
+    public Optional<TokenPair> issueSessionAfterEmailVerification(UUID userId) {
+        Instant now = clock.instant();
+        return users.findById(userId)
+                .filter(user -> user.status() == UserStatus.ACTIVE)
+                .map(user -> tx.execute(status -> issuePair(user, UUID.randomUUID(), null, now)));
     }
 
     /**
