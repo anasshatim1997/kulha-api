@@ -15,6 +15,8 @@ Google sign-in is part of the intended KULHA! account experience and was omitted
 - The API validates the ID-token signature against Google's JWKS and checks issuer, audience, expiry, `email_verified`, and nonce. It does not trust profile data supplied by the browser.
 - Persist `(provider, subject)` as a unique external identity. Never use email as the provider's stable identifier.
 - A verified Google email may be linked to an existing active account with the same normalized email. Disabled accounts cannot sign in or be reactivated through Google. New accounts receive only `CUSTOMER`.
+- **Pre-hijacking rule.** If the existing account's email was never verified, whoever registered it with a password has not proven they own the mailbox. Before linking, the account's password is replaced by an unusable random one, all its refresh tokens are revoked, and its unused verification and reset links are cancelled. An already-verified account keeps its password. Confirming an email address likewise revokes every session that existed before the confirmation.
+- A unique-constraint collision (two simultaneous first sign-ins, or an account already linked to a different Google subject) is retried once and otherwise answered with the normal 401, never a 500.
 - The API returns the existing KULHA token pair. The BFF stores it only in the existing HttpOnly cookies. Google tokens are not stored or exposed to browser JavaScript.
 - Require the existing shared BFF secret for the internal Google-login endpoint and apply the public-auth rate limit.
 

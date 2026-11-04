@@ -1,7 +1,7 @@
 # ADR 002: Authentication with self-issued JWT
 
 Date: 2026-10-29
-Status: Accepted (technical decision by the technical founder)
+Status: Accepted (technical decision by the technical founder). Extended by ADR-003 (Google sign-in).
 
 ## Context
 

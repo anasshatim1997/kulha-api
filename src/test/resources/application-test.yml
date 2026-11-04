@@ -1,11 +1,30 @@
-﻿spring:
+# Test profile: self-contained, so the suite does not depend on a local .env file or on
+# ADMIN_BOOTSTRAP_* / JWT key variables that happen to be set on a developer machine.
+# NOTE: this file must be saved as UTF-8 *without* BOM.
+spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME_TEST:kulha_test}
+    username: ${DB_USER_TEST:${DB_USER:postgres}}
+    password: ${DB_PASSWORD_TEST:${DB_PASSWORD:postgres}}
+  mail:
+    host: localhost
+    port: 1025
 
 app:
+  web-base-url: http://localhost:3000
+  mail:
+    from: no-reply@kulha.local
+
   security:
     jwt:
+      # Always generate an ephemeral key in tests, even if a .env defines real keys.
+      private-key-base64: ""
+      public-key-base64: ""
       allow-ephemeral-key: true
 
   rate-limit:
     enabled: false
+
+# Never bootstrap an admin while the test context starts.
+ADMIN_BOOTSTRAP_EMAIL: ""
+ADMIN_BOOTSTRAP_PASSWORD: ""

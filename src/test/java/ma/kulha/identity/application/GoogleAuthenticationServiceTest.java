@@ -44,7 +44,7 @@ class GoogleAuthenticationServiceTest {
 
     private static GoogleAuthenticationService service(
             org.springframework.security.oauth2.jwt.JwtDecoder decoder, String secret) {
-        return new GoogleAuthenticationService(decoder, null, null, null, null, null,
+        return new GoogleAuthenticationService(decoder, null, null, null, null, null, null, null,
                 Clock.systemUTC(), secret, CLIENT_ID);
     }
 

@@ -1,5 +1,7 @@
 # KULHA API security review — 2026-11-01
 
+> **Superseded in part (2026-11-03):** Google sign-in is now implemented; see ADR-003. Statements below that Google sign-in is "not configured" or must not be enabled describe the state on 2026-11-01.
+
 Scope: source contained in the backend ZIP provided for review. This is a code/configuration review, not a penetration test or legal/compliance certification.
 
 ## Changes made in this pass

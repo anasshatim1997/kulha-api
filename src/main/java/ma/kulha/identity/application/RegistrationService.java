@@ -10,6 +10,7 @@ import ma.kulha.identity.domain.model.EmailTokenType;
 import ma.kulha.identity.domain.model.User;
 import ma.kulha.identity.domain.model.UserStatus;
 import ma.kulha.identity.domain.repository.EmailTokenRepository;
+import ma.kulha.identity.domain.repository.RefreshTokenRepository;
 import ma.kulha.identity.domain.repository.UserRepository;
 import ma.kulha.notification.application.NotificationApi;
 import ma.kulha.notification.application.TemplateKey;
@@ -30,6 +31,7 @@ public class RegistrationService {
 
     private final UserRepository users;
     private final EmailTokenRepository tokens;
+    private final RefreshTokenRepository refreshTokens;
     private final PasswordEncoder passwordEncoder;
     private final NotificationApi notifications;
     private final RateLimiter rateLimiter;
@@ -39,6 +41,7 @@ public class RegistrationService {
 
     RegistrationService(UserRepository users,
                         EmailTokenRepository tokens,
+                        RefreshTokenRepository refreshTokens,
                         PasswordEncoder passwordEncoder,
                         NotificationApi notifications,
                         RateLimiter rateLimiter,
@@ -47,6 +50,7 @@ public class RegistrationService {
                         @Value("${app.web-base-url}") String webBaseUrl) {
         this.users = users;
         this.tokens = tokens;
+        this.refreshTokens = refreshTokens;
         this.passwordEncoder = passwordEncoder;
         this.notifications = notifications;
         this.rateLimiter = rateLimiter;
@@ -93,6 +97,9 @@ public class RegistrationService {
             UUID userId = tokens.consume(OpaqueTokens.hash(rawToken), EmailTokenType.VERIFY, now)
                     .orElseThrow(InvalidTokenException::new);
             users.markEmailVerified(userId, now);
+            // Anyone who registered this address before the mailbox was proven (pre-hijacking) must
+            // not keep a session that predates the verification. The caller issues a fresh one.
+            refreshTokens.revokeAllForUser(userId, now);
             return userId;
         });
     }
