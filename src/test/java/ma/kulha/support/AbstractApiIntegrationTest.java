@@ -12,6 +12,7 @@ import java.util.regex.Pattern;
 import ma.kulha.identity.domain.model.Role;
 import ma.kulha.identity.domain.model.User;
 import ma.kulha.identity.domain.repository.UserRepository;
+import ma.kulha.shared.web.CorrelationIdFilter;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -55,9 +56,17 @@ public abstract class AbstractApiIntegrationTest {
 
     protected MockMvc mvc;
 
+    @Autowired
+    protected CorrelationIdFilter correlationIdFilter;
+
     @BeforeEach
     protected void resetState() {
-        mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
+        mvc = MockMvcBuilders.webAppContextSetup(context)
+                .addFilters(correlationIdFilter)
+                .apply(springSecurity())
+                .build();
+        jdbc.sql("DELETE FROM offer.idempotency_keys").update();
+        jdbc.sql("DELETE FROM offer.offers").update();
         jdbc.sql("DELETE FROM merchant.merchants").update();
         jdbc.sql("DELETE FROM identity.users").update(); // tokens and roles go with it (ON DELETE CASCADE)
         jdbc.sql("TRUNCATE admin.audit_log").update();

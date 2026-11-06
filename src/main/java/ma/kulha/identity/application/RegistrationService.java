@@ -87,6 +87,16 @@ public class RegistrationService {
         sendVerificationEmail(user.email(), rawToken);
     }
 
+    public EmailStatus checkEmail(String email) {
+        String normalized = User.normalizeEmail(email);
+        return users.findByEmail(normalized)
+                .map(user -> new EmailStatus(true, user.isEmailVerified()))
+                .orElseGet(() -> new EmailStatus(false, false));
+    }
+
+    public record EmailStatus(boolean exists, boolean verified) {
+    }
+
     /**
      * Verifies the email behind a token and returns the id of its owner, so the caller can sign them in.
      * A token works once.

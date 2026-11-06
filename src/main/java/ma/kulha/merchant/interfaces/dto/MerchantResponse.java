@@ -14,12 +14,13 @@ public record MerchantResponse(
         String city,
         String phone,
         String openingHours,
+        String pickupInstructions,
         MerchantStatus status,
         String decisionReason,
         Instant createdAt) {
 
     public static MerchantResponse from(Merchant m) {
         return new MerchantResponse(m.id(), m.name(), m.businessType(), m.address(), m.city(), m.phone(),
-                m.openingHours(), m.status(), m.decisionReason(), m.createdAt());
+                m.openingHours(), m.pickupInstructions(), m.status(), m.decisionReason(), m.createdAt());
     }
 }

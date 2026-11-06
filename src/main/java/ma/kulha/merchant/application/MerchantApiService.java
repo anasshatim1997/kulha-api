@@ -24,4 +24,14 @@ class MerchantApiService implements MerchantApi {
     public Optional<UUID> findMerchantIdByOwner(UUID ownerUserId) {
         return merchants.findByOwner(ownerUserId).map(Merchant::id);
     }
+
+    @Override
+    public Optional<UUID> resolveActingMerchant(UUID userId) {
+        return merchants.findByOwner(userId).map(Merchant::id);
+    }
+
+    @Override
+    public void lockForOfferMutation(UUID merchantId) {
+        merchants.lockForOfferMutation(merchantId);
+    }
 }

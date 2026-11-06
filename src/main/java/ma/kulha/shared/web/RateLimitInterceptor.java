@@ -33,6 +33,7 @@ class RateLimitInterceptor implements HandlerInterceptor {
             "/api/v1/auth/google", new Rule("google-login", 10, Duration.ofMinutes(1)),
             "/api/v1/auth/refresh", new Rule("refresh", 30, Duration.ofMinutes(1)),
             "/api/v1/auth/register", new Rule("register", 10, Duration.ofHours(1)),
+            "/api/v1/auth/email-status", new Rule("email-status", 12, Duration.ofMinutes(1)),
             "/api/v1/auth/verify-email", new Rule("verify-email", 20, Duration.ofHours(1)),
             "/api/v1/auth/resend-verification", new Rule("resend-verification", 5, Duration.ofHours(1)),
             "/api/v1/auth/forgot-password", new Rule("forgot-password", 5, Duration.ofHours(1)),

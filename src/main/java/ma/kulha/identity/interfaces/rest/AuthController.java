@@ -9,6 +9,8 @@ import ma.kulha.identity.application.PasswordResetService;
 import ma.kulha.identity.application.RegisterCommand;
 import ma.kulha.identity.application.RegistrationService;
 import ma.kulha.identity.application.TokenPair;
+import ma.kulha.identity.interfaces.dto.EmailStatusRequest;
+import ma.kulha.identity.interfaces.dto.EmailStatusResponse;
 import ma.kulha.identity.interfaces.dto.ForgotPasswordRequest;
 import ma.kulha.identity.interfaces.dto.GoogleLoginRequest;
 import ma.kulha.identity.interfaces.dto.LoginRequest;
@@ -41,6 +43,12 @@ public class AuthController {
         this.authentication = authentication;
         this.passwordReset = passwordReset;
         this.googleAuthentication = googleAuthentication;
+    }
+
+    @PostMapping("/email-status")
+    EmailStatusResponse emailStatus(@Valid @RequestBody EmailStatusRequest request) {
+        RegistrationService.EmailStatus status = registration.checkEmail(request.email());
+        return new EmailStatusResponse(status.exists(), status.verified());
     }
 
     /** Always 202: the response never reveals whether the email was already registered. */

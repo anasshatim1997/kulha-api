@@ -14,6 +14,7 @@ public interface MerchantRepository {
     Optional<Merchant> findById(UUID id);
 
     Optional<Merchant> findByOwner(UUID ownerUserId);
+    void lockForOfferMutation(UUID merchantId);
 
     /**
      * Saves the merchant only if it still has the expected status, in one atomic statement.

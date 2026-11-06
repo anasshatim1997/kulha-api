@@ -22,6 +22,7 @@ public record Merchant(
         String city,
         String phone,
         String openingHours,
+        String pickupInstructions,
         MerchantStatus status,
         String decisionReason,
         UUID decidedBy,
@@ -45,7 +46,11 @@ public record Merchant(
 
     /** The editable part of a merchant. Validates and trims its fields. */
     public record Profile(String name, BusinessType businessType, String address,
-                          String city, String phone, String openingHours) {
+                          String city, String phone, String openingHours, String pickupInstructions) {
+
+        public Profile(String name, BusinessType businessType, String address, String city, String phone, String openingHours) {
+            this(name, businessType, address, city, phone, openingHours, null);
+        }
 
         public Profile {
             Objects.requireNonNull(businessType, "businessType");
@@ -54,6 +59,14 @@ public record Merchant(
             city = required(city, "city", 80);
             phone = required(phone, "phone", 30);
             openingHours = required(openingHours, "openingHours", 500);
+            pickupInstructions = optional(pickupInstructions, "pickupInstructions", 500);
+        }
+
+        private static String optional(String value, String field, int maxLength) {
+            if (value == null || value.isBlank()) return null;
+            String trimmed = value.trim();
+            if (trimmed.length() > maxLength) throw new IllegalArgumentException(field + " is too long");
+            return trimmed;
         }
 
         private static String required(String value, String field, int maxLength) {
@@ -70,7 +83,7 @@ public record Merchant(
 
     public static Merchant apply(UUID ownerUserId, Profile profile, Instant now) {
         return new Merchant(UUID.randomUUID(), ownerUserId, profile.name(), profile.businessType(),
-                profile.address(), profile.city(), profile.phone(), profile.openingHours(),
+                profile.address(), profile.city(), profile.phone(), profile.openingHours(), profile.pickupInstructions(),
                 MerchantStatus.PENDING, null, null, null, now, now);
     }
 
@@ -106,7 +119,7 @@ public record Merchant(
         }
         boolean resubmitted = status == MerchantStatus.REJECTED;
         return new Merchant(id, ownerUserId, profile.name(), profile.businessType(),
-                profile.address(), profile.city(), profile.phone(), profile.openingHours(),
+                profile.address(), profile.city(), profile.phone(), profile.openingHours(), profile.pickupInstructions(),
                 resubmitted ? MerchantStatus.PENDING : status,
                 resubmitted ? null : decisionReason,
                 resubmitted ? null : decidedBy,
@@ -115,7 +128,7 @@ public record Merchant(
     }
 
     private Merchant decided(MerchantStatus newStatus, String reason, UUID adminId, Instant now) {
-        return new Merchant(id, ownerUserId, name, businessType, address, city, phone, openingHours,
+        return new Merchant(id, ownerUserId, name, businessType, address, city, phone, openingHours, pickupInstructions,
                 newStatus, reason, adminId, now, createdAt, now);
     }
 

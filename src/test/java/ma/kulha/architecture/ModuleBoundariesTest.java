@@ -25,6 +25,12 @@ class ModuleBoundariesTest {
                             "org.springframework..", "jakarta.persistence..")
                     .allowEmptyShould(true);
 
+    @ArchTest
+    static final ArchRule interfaces_do_not_depend_on_infrastructure =
+            noClasses().that().resideInAPackage("..interfaces..")
+                    .should().dependOnClassesThat().resideInAPackage("..infrastructure..")
+                    .allowEmptyShould(true);
+
     // A module never reaches into another module's internals.
     @ArchTest
     static void modules_do_not_use_each_others_internals(JavaClasses classes) {

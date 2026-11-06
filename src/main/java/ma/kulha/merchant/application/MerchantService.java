@@ -16,6 +16,7 @@ import ma.kulha.merchant.domain.repository.MerchantRepository;
 import ma.kulha.notification.application.NotificationApi;
 import ma.kulha.notification.application.TemplateKey;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -28,15 +29,17 @@ public class MerchantService {
     private final NotificationApi notifications;
     private final TransactionTemplate tx;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     MerchantService(MerchantRepository merchants, IdentityApi identity, AuditApi audit,
-                    NotificationApi notifications, TransactionTemplate tx, Clock clock) {
+                    NotificationApi notifications, TransactionTemplate tx, Clock clock, ApplicationEventPublisher events) {
         this.merchants = merchants;
         this.identity = identity;
         this.audit = audit;
         this.notifications = notifications;
         this.tx = tx;
         this.clock = clock;
+        this.events = events;
     }
 
     // ---------- the merchant's own side ----------
@@ -121,6 +124,8 @@ public class MerchantService {
             audit.append(adminId, auditAction, "MERCHANT", merchantId.toString(), next.decisionReason(), "SUCCESS");
             return next;
         });
+
+        if (updated.status() == MerchantStatus.SUSPENDED) events.publishEvent(new MerchantSuspended(updated.id()));
 
         identity.emailOf(updated.ownerUserId()).ifPresent(email -> {
             Map<String, String> params = updated.decisionReason() == null

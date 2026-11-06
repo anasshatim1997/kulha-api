@@ -82,6 +82,31 @@ class AuthRegistrationIntegrationTest {
     }
 
     @Test
+    void emailStatusReportsAnAvailableAddressWithoutCreatingAnAccount() throws Exception {
+        MockHttpServletResponse response = postResponse("/api/v1/auth/email-status", "{\"email\":\"new@example.com\"}");
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(response.getContentAsString()).contains("\"exists\":false", "\"verified\":false");
+        assertThat(userCount()).isZero();
+    }
+
+    @Test
+    void emailStatusReportsExistingAccountAndVerificationState() throws Exception {
+        register("status@example.com");
+        MockHttpServletResponse unverified = postResponse("/api/v1/auth/email-status", "{\"email\":\"STATUS@example.com\"}");
+
+        assertThat(unverified.getStatus()).isEqualTo(200);
+        assertThat(unverified.getContentAsString()).contains("\"exists\":true", "\"verified\":false");
+
+        String token = RecordingNotificationApi.tokenFrom(emails.sent().getFirst());
+        assertThat(postJson("/api/v1/auth/verify-email", "{\"token\":\"" + token + "\"}")).isEqualTo(200);
+        MockHttpServletResponse verified = postResponse("/api/v1/auth/email-status", "{\"email\":\"status@example.com\"}");
+
+        assertThat(verified.getStatus()).isEqualTo(200);
+        assertThat(verified.getContentAsString()).contains("\"exists\":true", "\"verified\":true");
+    }
+
+    @Test
     void registerCreatesAnUnverifiedUserAndSendsOneVerificationEmail() throws Exception {
         assertThat(register("alice@example.com")).isEqualTo(202);
 

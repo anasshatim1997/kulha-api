@@ -1,0 +1,204 @@
+openapi: 3.1.0
+info:
+  title: KULHA Offers API
+  version: 1.0.0
+  description: Merchant offer management endpoints for milestone M4. No customer discovery endpoints are included.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /merchants/me/offers:
+    post:
+      operationId: createMerchantOffer
+      summary: Create a draft offer
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OfferWrite' }
+      responses:
+        '201':
+          description: Draft created
+          content: { application/json: { schema: { $ref: '#/components/schemas/Offer' } } }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+    get:
+      operationId: listMerchantOffers
+      parameters:
+        - in: query
+          name: status
+          schema: { $ref: '#/components/schemas/OfferStatus' }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 0, default: 0 }
+        - in: query
+          name: size
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: Paginated offer summaries
+          content: { application/json: { schema: { $ref: '#/components/schemas/OfferPage' } } }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+  /merchants/me/offers/{id}:
+    parameters:
+      - $ref: '#/components/parameters/OfferId'
+    get:
+      operationId: getMerchantOffer
+      responses:
+        '200': { description: Offer, content: { application/json: { schema: { $ref: '#/components/schemas/Offer' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+    put:
+      operationId: editMerchantOffer
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/OfferWrite' } } }
+      responses:
+        '200': { description: Updated offer, content: { application/json: { schema: { $ref: '#/components/schemas/Offer' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+    delete:
+      operationId: cancelDraftOffer
+      responses:
+        '204': { description: Draft cancelled }
+        '404': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+  /merchants/me/offers/{id}/publish:
+    post:
+      operationId: publishMerchantOffer
+      parameters: [{ $ref: '#/components/parameters/OfferId' }]
+      responses:
+        '200': { description: Published offer, content: { application/json: { schema: { $ref: '#/components/schemas/Offer' } } } }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+  /merchants/me/offers/{id}/unpublish:
+    post:
+      operationId: unpublishMerchantOffer
+      parameters: [{ $ref: '#/components/parameters/OfferId' }]
+      responses:
+        '200': { description: Unpublished offer, content: { application/json: { schema: { $ref: '#/components/schemas/Offer' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+  /merchants/me/offers/{id}/duplicate:
+    post:
+      operationId: duplicateMerchantOffer
+      parameters:
+        - $ref: '#/components/parameters/OfferId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201': { description: New draft with no pickup window, content: { application/json: { schema: { $ref: '#/components/schemas/Offer' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /admin/offers/{id}/suspend:
+    post:
+      operationId: suspendOffer
+      parameters: [{ $ref: '#/components/parameters/OfferId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Reason' } } }
+      responses:
+        '200': { description: Suspended offer }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /admin/offers/{id}/reinstate:
+    post:
+      operationId: reinstateOffer
+      parameters: [{ $ref: '#/components/parameters/OfferId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/Reason' } } }
+      responses:
+        '200': { description: Reinstated offer (UNPUBLISHED) }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /admin/offers/{id}/history:
+    get:
+      operationId: getOfferAuditHistory
+      parameters: [{ $ref: '#/components/parameters/OfferId' }]
+      responses:
+        '200': { description: Append-only audit history, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AuditEntry' } } } } }
+        '403': { $ref: '#/components/responses/Problem' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    OfferId: { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    IdempotencyKey: { in: header, name: Idempotency-Key, required: false, schema: { type: string, maxLength: 128 }, description: 'Optional idempotency key, scoped to the authenticated actor. Same key and same request replays the original 201 response; same key with a different request returns 409.' }
+  responses:
+    Problem:
+      description: RFC 9457 Problem Details
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+  schemas:
+    OfferStatus: { type: string, enum: [DRAFT, PUBLISHED, UNPUBLISHED, SUSPENDED, EXPIRED, CANCELLED] }
+    OfferCategory: { type: string, enum: [BREAD_PASTRY, PREPARED_MEALS, GROCERIES, FRUIT_VEG, DRINKS, SURPRISE_BASKET, OTHER] }
+    AllergensStatus: { type: string, enum: [UNKNOWN, DECLARED] }
+    OfferWrite:
+      type: object
+      required: [title, description, category, priceMinor, quantityTotal, allergensStatus]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, minLength: 1, maxLength: 1000 }
+        category: { $ref: '#/components/schemas/OfferCategory' }
+        priceMinor: { type: integer, minimum: 100, maximum: 200000, description: MAD centimes }
+        originalPriceMinor: { type: [integer, 'null'], minimum: 100, maximum: 200000 }
+        quantityTotal: { type: integer, minimum: 1, maximum: 500 }
+        pickupStart: { type: [string, 'null'], format: date-time }
+        pickupEnd: { type: [string, 'null'], format: date-time }
+        allergensStatus: { $ref: '#/components/schemas/AllergensStatus' }
+        allergens: { type: array, items: { type: string, enum: [GLUTEN, CRUSTACEANS, EGGS, FISH, PEANUTS, SOY, MILK, NUTS, CELERY, MUSTARD, SESAME, SULPHITES, LUPIN, MOLLUSCS] } }
+        foodNotes: { type: [string, 'null'], maxLength: 500 }
+        version: { type: [integer, 'null'], minimum: 0 }
+    Offer:
+      allOf:
+        - $ref: '#/components/schemas/OfferWrite'
+        - type: object
+          required: [id, merchantId, quantityReserved, availableUnits, status, version, createdAt, updatedAt]
+          properties:
+            id: { type: string, format: uuid }
+            merchantId: { type: string, format: uuid }
+            quantityReserved: { type: integer }
+            availableUnits: { type: integer }
+            status: { $ref: '#/components/schemas/OfferStatus' }
+            publishedAt: { type: [string, 'null'], format: date-time }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    OfferPage:
+      type: object
+      properties:
+        items: { type: array, items: { type: object } }
+        page: { type: integer }
+        size: { type: integer }
+        total: { type: integer }
+    Reason:
+      type: object
+      required: [reason]
+      properties: { reason: { type: string, minLength: 1, maxLength: 500 } }
+    AuditEntry:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        actorUserId: { type: string, format: uuid }
+        action: { type: string }
+        targetType: { type: string }
+        targetId: { type: string }
+        reason: { type: [string, 'null'] }
+        result: { type: string }
+        correlationId: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+    Problem:
+      type: object
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string, format: uri-reference }
+        fieldErrors:
+          type: object
+          additionalProperties: { type: string }
+          description: Present on 422 validation responses; maps request field names to validation messages.

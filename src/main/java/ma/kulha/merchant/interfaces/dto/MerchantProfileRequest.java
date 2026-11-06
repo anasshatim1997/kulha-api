@@ -13,9 +13,10 @@ public record MerchantProfileRequest(
         @NotBlank @Size(max = 255) String address,
         @NotBlank @Size(max = 80) String city,
         @NotBlank @Size(max = 30) @Pattern(regexp = "^[+0-9 ()-]{6,30}$") String phone,
-        @NotBlank @Size(max = 500) String openingHours) {
+        @NotBlank @Size(max = 500) String openingHours,
+        @Size(max = 500) String pickupInstructions) {
 
     public Merchant.Profile toProfile() {
-        return new Merchant.Profile(name, businessType, address, city, phone, openingHours);
+        return new Merchant.Profile(name, businessType, address, city, phone, openingHours, pickupInstructions);
     }
 }

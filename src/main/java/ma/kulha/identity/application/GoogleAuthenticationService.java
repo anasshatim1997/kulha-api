@@ -63,6 +63,15 @@ public class GoogleAuthenticationService {
         return new InvalidCredentialsException();
     }
 
+    /** First 8 hex characters of SHA-256: enough to compare two secrets by eye, useless to an attacker. */
+    private static String fingerprint(byte[] secret) {
+        try {
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(secret)).substring(0, 8);
+        } catch (java.security.NoSuchAlgorithmException impossible) {
+            return "?";
+        }
+    }
+
     /** Google sends a JSON boolean; some libraries and proxies turn it into the string "true". */
     private static boolean isTrue(Object value) {
         return Boolean.TRUE.equals(value) || (value instanceof String text && "true".equalsIgnoreCase(text.trim()));
@@ -72,7 +81,10 @@ public class GoogleAuthenticationService {
         if (bffSecret.length == 0 || suppliedBffSecret == null || !MessageDigest.isEqual(
                 bffSecret, suppliedBffSecret.getBytes(StandardCharsets.UTF_8))) {
             // Most often KULHA_BFF_SHARED_SECRET differs between the web app and the API, or is unset on one side.
-            throw rejected(bffSecret.length == 0 ? "bff_secret_not_configured_on_api" : "bff_secret_mismatch");
+            throw rejected(bffSecret.length == 0 ? "bff_secret_not_configured_on_api"
+                    : "bff_secret_mismatch (api fingerprint " + fingerprint(bffSecret) + ", web app sent "
+                    + (suppliedBffSecret == null || suppliedBffSecret.isEmpty() ? "NOTHING"
+                    : "fingerprint " + fingerprint(suppliedBffSecret.getBytes(StandardCharsets.UTF_8))) + ")");
         }
         if (clientId.isBlank()) {
             log.warn("Google sign-in unavailable: GOOGLE_OAUTH_CLIENT_ID is not configured on the API");

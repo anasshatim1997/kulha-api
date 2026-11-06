@@ -34,6 +34,7 @@ public class SecurityConfig {
                 .requestMatchers("/error").permitAll()
                 .requestMatchers(HttpMethod.POST,
                         "/api/v1/auth/register",
+                        "/api/v1/auth/email-status",
                         "/api/v1/auth/verify-email",
                         "/api/v1/auth/resend-verification",
                         "/api/v1/auth/login",
@@ -45,6 +46,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/me").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/v1/merchants/apply").authenticated()
                 .requestMatchers("/api/v1/merchants/me").authenticated()
+                .requestMatchers("/api/v1/merchants/me/offers", "/api/v1/merchants/me/offers/**").hasRole("MERCHANT")
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .anyRequest().denyAll()   // deny by default; open routes explicitly, one at a time
             )

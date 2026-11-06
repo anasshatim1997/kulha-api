@@ -9,4 +9,8 @@ public interface MerchantApi {
     boolean isApproved(UUID merchantId);
 
     Optional<UUID> findMerchantIdByOwner(UUID ownerUserId);
+
+    Optional<UUID> resolveActingMerchant(UUID userId);
+
+    void lockForOfferMutation(UUID merchantId);
 }

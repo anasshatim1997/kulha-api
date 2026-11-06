@@ -20,7 +20,7 @@ import org.springframework.stereotype.Repository;
 class JdbcMerchantRepository implements MerchantRepository {
 
     private static final String SELECT_MERCHANT = """
-            SELECT id, owner_user_id, name, business_type, address, city, phone, opening_hours,
+            SELECT id, owner_user_id, name, business_type, address, city, phone, opening_hours, pickup_instructions,
                    status, decision_reason, decided_by, decided_at, created_at, updated_at
             FROM merchant.merchants
             """;
@@ -35,10 +35,10 @@ class JdbcMerchantRepository implements MerchantRepository {
     public void insert(Merchant m) {
         jdbc.sql("""
                 INSERT INTO merchant.merchants
-                    (id, owner_user_id, name, business_type, address, city, phone, opening_hours,
+                    (id, owner_user_id, name, business_type, address, city, phone, opening_hours, pickup_instructions,
                      status, decision_reason, decided_by, decided_at, created_at, updated_at)
                 VALUES
-                    (:id, :owner, :name, :type, :address, :city, :phone, :hours,
+                    (:id, :owner, :name, :type, :address, :city, :phone, :hours, :pickupInstructions,
                      :status, :reason, :decidedBy, :decidedAt, :createdAt, :updatedAt)
                 """)
                 .param("id", m.id())
@@ -49,6 +49,7 @@ class JdbcMerchantRepository implements MerchantRepository {
                 .param("city", m.city())
                 .param("phone", m.phone())
                 .param("hours", m.openingHours())
+                .param("pickupInstructions", m.pickupInstructions(), Types.VARCHAR)
                 .param("status", m.status().name())
                 .param("reason", m.decisionReason(), Types.VARCHAR)
                 .param("decidedBy", m.decidedBy(), Types.OTHER)
@@ -75,11 +76,17 @@ class JdbcMerchantRepository implements MerchantRepository {
     }
 
     @Override
+    public void lockForOfferMutation(UUID merchantId) {
+        jdbc.sql("SELECT id FROM merchant.merchants WHERE id = :id FOR UPDATE")
+                .param("id", merchantId).query(UUID.class).optional();
+    }
+
+    @Override
     public boolean updateIfStatus(Merchant m, MerchantStatus expectedStatus) {
         int updated = jdbc.sql("""
                 UPDATE merchant.merchants
                 SET name = :name, business_type = :type, address = :address, city = :city,
-                    phone = :phone, opening_hours = :hours, status = :status,
+                    phone = :phone, opening_hours = :hours, pickup_instructions = :pickupInstructions, status = :status,
                     decision_reason = :reason, decided_by = :decidedBy, decided_at = :decidedAt,
                     updated_at = :updatedAt
                 WHERE id = :id AND status = :expected
@@ -90,6 +97,7 @@ class JdbcMerchantRepository implements MerchantRepository {
                 .param("city", m.city())
                 .param("phone", m.phone())
                 .param("hours", m.openingHours())
+                .param("pickupInstructions", m.pickupInstructions(), Types.VARCHAR)
                 .param("status", m.status().name())
                 .param("reason", m.decisionReason(), Types.VARCHAR)
                 .param("decidedBy", m.decidedBy(), Types.OTHER)
@@ -134,6 +142,7 @@ class JdbcMerchantRepository implements MerchantRepository {
                 rs.getString("city"),
                 rs.getString("phone"),
                 rs.getString("opening_hours"),
+                rs.getString("pickup_instructions"),
                 MerchantStatus.valueOf(rs.getString("status")),
                 rs.getString("decision_reason"),
                 rs.getObject("decided_by", UUID.class),
