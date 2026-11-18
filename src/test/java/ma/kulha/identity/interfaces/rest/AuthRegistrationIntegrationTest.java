@@ -245,6 +245,12 @@ class AuthRegistrationIntegrationTest {
     }
 
     @Test
+    void emailStatusLookupIsNoLongerPublic() throws Exception {
+        int status = postJson("/api/v1/auth/email-status", "{\"email\":\"someone@example.com\"}");
+        assertThat(status).isIn(401, 403);
+    }
+
+    @Test
     void everythingElseStaysDenied() throws Exception {
         // 401 for an anonymous caller (resource server) or 403, depending on the entry point: both mean "denied".
         int status = mvc.perform(get("/api/v1/anything")).andReturn().getResponse().getStatus();
