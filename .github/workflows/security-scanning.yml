@@ -23,8 +23,8 @@ jobs:
           cache: maven
       - name: Make Maven wrapper executable
         run: chmod +x mvnw
-      - name: Maven verification
-        run: ./mvnw --batch-mode clean verify
+      - name: Maven package (tests run in the CI workflow with service containers)
+        run: ./mvnw --batch-mode -DskipTests package
       - name: Dependency vulnerability scan
         run: |
           go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.0.2
