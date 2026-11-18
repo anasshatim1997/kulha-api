@@ -58,7 +58,8 @@ class OfferIdempotencyIntegrationTest extends AbstractApiIntegrationTest {
 
         MockHttpServletResponse first = mvc.perform(post("/api/v1/merchants/me/offers/{id}/duplicate", offerId)
                 .header("Authorization", "Bearer " + ownerToken)
-                .header("Idempotency-Key", "duplicate-key-001")).andReturn().getResponse();
+                .header("Idempotency-Key", "duplicate-key-001")) // gitleaks:allow - deterministic test fixture, not a credential
+                .andReturn().getResponse();
         MockHttpServletResponse retry = mvc.perform(post("/api/v1/merchants/me/offers/{id}/duplicate", offerId)
                 .header("Authorization", "Bearer " + ownerToken)
                 .header("Idempotency-Key", "duplicate-key-001")).andReturn().getResponse();
