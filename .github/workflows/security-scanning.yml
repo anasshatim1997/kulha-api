@@ -16,9 +16,15 @@ jobs:
         with:
           fetch-depth: 0
       - name: Java toolchain
-        run: java -version
-      - name: Maven verification
-        run: ./mvnw --batch-mode clean verify
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Make Maven wrapper executable
+        run: chmod +x mvnw
+      - name: Maven package (tests run in the CI workflow with service containers)
+        run: ./mvnw --batch-mode -DskipTests package
       - name: Dependency vulnerability scan
         run: |
           go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.0.2

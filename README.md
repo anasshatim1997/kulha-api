@@ -4,7 +4,7 @@ Backend of **KULHA!**, an anti-food-waste marketplace for Morocco: merchants pub
 
 This is a **modular monolith** (Spring Boot + PostgreSQL). Module boundaries follow DDD so a module can be extracted into its own service later, but for the pilot there is **one deployable application**. See `docs/adr/001-modular-monolith.md`.
 
-> Status: Sprint 1 (foundation). Not production-ready. Never mark a build or test as passing unless you have seen the real result.
+> Current implementation: identity and email verification, Google OIDC sign-in, merchant onboarding and approval, offer publication and discovery, Elasticsearch-backed search/nearby discovery, reservations and pickup workflows, notifications, and administrative/audit capabilities are present in the codebase. This is an evolving pilot application; verify the current deployment configuration and CI result before treating any environment as production-ready.
 
 ## Stack
 
@@ -14,12 +14,13 @@ This is a **modular monolith** (Spring Boot + PostgreSQL). Module boundaries fol
 | Framework | Spring Boot 4.1.x (version pinned in `pom.xml`) |
 | Build | Maven, wrapper included (`mvnw` / `mvnw.cmd`) |
 | Database | PostgreSQL 16, schema managed by Flyway |
-| Security | Spring Security, deny-by-default (self-issued JWT authentication arrives in Sprint 2) |
+| Security | Spring Security, JWT resource-server validation, email verification, password reset, Google OIDC/BFF integration, and rate limiting |
 | Tests | JUnit 5, ArchUnit (module boundaries) |
-| Local infra | Docker Compose, PostgreSQL only |
-| CI | GitHub Actions (`.github/workflows/ci.yaml`) with a PostgreSQL service container |
+| Search | Elasticsearch 8.x (HTTP API via Spring RestClient) |
+| Local infra | Docker Compose, PostgreSQL, Mailpit, and Elasticsearch |
+| CI | GitHub Actions (`.github/workflows/ci.yml`) with PostgreSQL and Elasticsearch service containers |
 
-Not in the project yet, on purpose: RabbitMQ, Redis and SMTP (Sprint 8), the payment provider (Sprint 9), Testcontainers and OpenAPI docs (when the first endpoints need them).
+Optional infrastructure such as RabbitMQ, Redis, and an external payment provider is not assumed by the current core flow. SMTP is configured through Spring Mail; local development uses the configured local mail service. Check the actual compose files and environment for the services enabled in your setup.
 
 ## Prerequisites
 
@@ -40,7 +41,7 @@ git --version
 
 ### 1. Create your `.env`
 
-Create a file named `.env` in the project root. It is ignored by Git and must **never be committed**. Local values only:
+Create a file named `.env` in the project root. Spring imports this file automatically. It is ignored by Git and must **never be committed**. Start with the database and local mail settings below, then add the JWT key and other values required by the configuration sections that follow:
 
 ```
 DB_HOST=localhost
@@ -89,7 +90,7 @@ $env:DB_PORT="5433"
 curl http://localhost:8080/actuator/health
 ```
 
-Expected: `{"groups":["liveness","readiness"],"status":"UP"}`. Any other URL returns 403, because everything is denied by default.
+Expected: a JSON health response with `status: UP` when the database and required application dependencies are healthy. Public API routes are explicitly configured; protected routes require the appropriate authentication and authorization.
 
 If health shows `DOWN`, the database is not reachable: check `docker compose ps`.
 
@@ -135,34 +136,35 @@ Priority scenarios, added as the modules arrive:
 
 ## Continuous integration
 
-`.github/workflows/ci.yaml` runs `./mvnw clean verify` on every push to `main` and on every pull request, on a GitHub-hosted Ubuntu machine with a temporary PostgreSQL 16 service. Check the **Actions** tab after each push and fix a red build before continuing. The password in that file belongs to a throwaway CI database and is not a real secret.
+`.github/workflows/ci.yml` runs `./mvnw --batch-mode clean verify` on pushes to `main` and pull requests, using GitHub-hosted Ubuntu with PostgreSQL 16 and Elasticsearch services. Check the **Actions** tab after each push and fix a red build before continuing. The password in that file belongs to a throwaway CI database and is not a real secret.
 
 ## Project structure
 
 ```
 kulha-api/
-  .github/workflows/ci.yaml
+  .github/workflows/ci.yml
   docs/adr/                  # architecture decision records
   src/main/java/ma/kulha/
     KulhaApiApplication.java
-    shared/security/         # SecurityConfig (deny by default, health open)
-    identity/                # accounts, roles, email verification   (Sprint 2)
-    merchant/                # merchant profile, admin approval      (Sprint 3)
-    offer/                   # offers, publication rules             (Sprint 4-5)
-    reservation/             # availability, orders, pickup code     (Sprint 6-7)
-    notification/            # emails, outbox consumers              (Sprint 8)
-    payment/                 # payment model, pay-at-pickup default  (Sprint 9)
-    admin/                   # moderation, audit log                 (Sprint 10)
+    shared/security/         # SecurityConfig, JWT and BFF trust boundaries
+    identity/                # accounts, roles, verification, password reset, Google OIDC
+    merchant/                # merchant profiles, applications and approval
+    offer/                   # offer lifecycle, Elasticsearch indexing and discovery
+    reservation/             # availability, reservations and pickup workflows
+    notification/            # email notifications and templates
+    payment/                 # payment domain and provider boundary
+    admin/                   # moderation and audit capabilities
   src/main/resources/
     application.yml
     db/migration/            # Flyway: V1__init_schemas.sql, ...
   src/test/java/ma/kulha/
     architecture/            # ArchUnit boundary tests
-  compose.yaml               # local PostgreSQL
+  compose.yaml               # local PostgreSQL and Mailpit
+  infra/elasticsearch/       # local Elasticsearch service
   pom.xml
 ```
 
-Planned layout inside each module (created when the module is built):
+Typical layout inside each module:
 
 ```
 <module>/
@@ -195,7 +197,7 @@ Rules 2 and 3 are enforced by ArchUnit. Availability and orders live in the same
 
 ## JWT signing key configuration
 
-For local development, copy `.env.example` to `.env`. The example explicitly enables an ephemeral RSA key for local use only. A new local key is generated at each restart, so existing access tokens stop validating after a restart; users can sign in again or refresh using a valid refresh token.
+The application defaults to `APP_SECURITY_JWT_ALLOW_EPHEMERAL_KEY=false`. For local development, either provide a persistent RSA key pair using the variables below or explicitly opt into the ephemeral-key development mode. Ephemeral keys are not suitable for staging or production and invalidate access tokens when the process restarts.
 
 For staging and production, leave `APP_SECURITY_JWT_ALLOW_EPHEMERAL_KEY=false` and inject a persistent RSA key pair from your secret manager:
 
@@ -235,7 +237,7 @@ A Google-verified email can link to an existing active account with the same nor
 ## Security baseline
 
 - No secrets in Git, images or logs. `.env` is in `.gitignore`. Check `git status` before every commit.
-- Spring Security denies everything except `/actuator/health`. Open routes explicitly, one at a time.
+- Spring Security uses an explicit allowlist for public authentication and health routes; protected APIs require validated authentication and authorization. Keep the allowlist narrow.
 - Do not expose actuator or management endpoints publicly in staging or production.
 - Never store card data.
 - Do not log passwords, tokens, cookies or unnecessary personal data.
@@ -264,22 +266,13 @@ Architecture decisions are recorded in `docs/adr/`:
 - README and ADRs updated when needed
 - No known critical regression left silently
 
-## Roadmap (backend)
+## Current implementation areas
 
-| Sprint | Backend focus |
-|---|---|
-| 1 | Repo, CI, PostgreSQL, health endpoint, module skeleton, ArchUnit, ADRs |
-| 2 | Accounts, email verification, roles, authorization |
-| 3 | Merchant profile, admin approval |
-| 4-5 | Offers: create, publish, disable, catalog |
-| 6-7 | Reservation, atomic stock, pickup code |
-| 8 | Outbox, RabbitMQ, SMTP, Redis (rate limits, cache) |
-| 9 | Payment (pay-at-pickup unless a provider is approved) |
-| 10-12 | Admin and audit, security hardening, backup and restore, release candidate |
+The codebase is organized around identity, merchant, offer, reservation, notification, payment, and admin modules. Consult the source packages, migrations, API contracts, and ADRs for current behavior; do not use the original sprint plan as a status report.
 
-## Out of scope for the pilot
+## Product boundary
 
-Microservice deployments, Kubernetes, native mobile app, delivery, wallet or loyalty, AI features.
+KULHA is a pickup-first Moroccan surplus-food marketplace. Do not introduce delivery assumptions into reservation or offer flows without an explicit product decision. Keep the modular-monolith architecture; see `docs/adr/001-modular-monolith.md`.
 
 ## Confidentiality
 

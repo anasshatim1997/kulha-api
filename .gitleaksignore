@@ -1,0 +1,3 @@
+# Deterministic Idempotency-Key values in integration tests are fixtures, not credentials.
+b4fcce5b1c736c0bbf808eb7bc2a10115ffa9f32:src/test/java/ma/kulha/offer/OfferIdempotencyIntegrationTest.java:generic-api-key:61
+b4fcce5b1c736c0bbf808eb7bc2a10115ffa9f32:src/test/java/ma/kulha/offer/OfferIdempotencyIntegrationTest.java:generic-api-key:64
