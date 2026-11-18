@@ -16,7 +16,8 @@ This is a **modular monolith** (Spring Boot + PostgreSQL). Module boundaries fol
 | Database | PostgreSQL 16, schema managed by Flyway |
 | Security | Spring Security, JWT resource-server validation, email verification, password reset, Google OIDC/BFF integration, and rate limiting |
 | Tests | JUnit 5, ArchUnit (module boundaries) |
-| Search | Elasticsearch 8.x (HTTP API via Spring RestClient) |\n| Local infra | Docker Compose, PostgreSQL, Mailpit, and Elasticsearch |
+| Search | Elasticsearch 8.x (HTTP API via Spring RestClient) |
+| Local infra | Docker Compose, PostgreSQL, Mailpit, and Elasticsearch |
 | CI | GitHub Actions (`.github/workflows/ci.yml`) with PostgreSQL and Elasticsearch service containers |
 
 Optional infrastructure such as RabbitMQ, Redis, and an external payment provider is not assumed by the current core flow. SMTP is configured through Spring Mail; local development uses the configured local mail service. Check the actual compose files and environment for the services enabled in your setup.
@@ -40,7 +41,7 @@ git --version
 
 ### 1. Create your `.env`
 
-Create a file named `.env` in the project root. It is ignored by Git and must **never be committed**. Local values only:
+Create a file named `.env` in the project root. Spring imports this file automatically. It is ignored by Git and must **never be committed**. Start with the database and local mail settings below, then add the JWT key and other values required by the configuration sections that follow:
 
 ```
 DB_HOST=localhost
@@ -195,7 +196,7 @@ Rules 2 and 3 are enforced by ArchUnit. Availability and orders live in the same
 
 ## JWT signing key configuration
 
-For local development, copy `.env.example` to `.env`. The example explicitly enables an ephemeral RSA key for local use only. A new local key is generated at each restart, so existing access tokens stop validating after a restart; users can sign in again or refresh using a valid refresh token.
+The application defaults to `APP_SECURITY_JWT_ALLOW_EPHEMERAL_KEY=false`. For local development, either provide a persistent RSA key pair using the variables below or explicitly opt into the ephemeral-key development mode. Ephemeral keys are not suitable for staging or production and invalidate access tokens when the process restarts.
 
 For staging and production, leave `APP_SECURITY_JWT_ALLOW_EPHEMERAL_KEY=false` and inject a persistent RSA key pair from your secret manager:
 
