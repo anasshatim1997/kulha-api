@@ -24,6 +24,46 @@ class MerchantApplicationIntegrationTest extends AbstractApiIntegrationTest {
     }
 
     @Test
+    void merchantApplicationPersistsAnOptionalShopMapPin() throws Exception {
+        String token = tokenFor(createUser("pinned-owner@example.com", true));
+        String profile = profileJson("Boulangerie Atlas")
+                .replace("\"phone\"", "\"district\":\"Maarif\",\"latitude\":33.589,\"longitude\":-7.62,\"phone\"");
+
+        MockHttpServletResponse response = doPost("/api/v1/merchants/apply", profile, token);
+
+        assertThat(response.getStatus()).isEqualTo(201);
+        assertThat(response.getContentAsString()).contains("\"latitude\":33.589", "\"longitude\":-7.62", "\"district\":\"Maarif\"");
+        assertThat(jdbc.sql("SELECT latitude FROM merchant.merchants WHERE owner_user_id=(SELECT id FROM identity.users WHERE email='pinned-owner@example.com')")
+                .query(Double.class).single()).isEqualTo(33.589);
+    }
+
+    @Test
+    void anApprovedMerchantCanUpdateItsShopPinWithoutLosingPickupInstructions() throws Exception {
+        String ownerToken = tokenFor(createUser("approved-pinned-owner@example.com", true));
+        String initialProfile = profileJson("Boulangerie Atlas")
+                .replace("\"phone\"", "\"district\":\"Maarif\",\"latitude\":33.589,\"longitude\":-7.62,\"pickupInstructions\":\"Pickup at the side counter\",\"phone\"");
+        MockHttpServletResponse applied = doPost("/api/v1/merchants/apply", initialProfile, ownerToken);
+        assertThat(applied.getStatus()).isEqualTo(201);
+        String merchantId = field(applied, "id");
+
+        String adminToken = tokenFor(createUser("approved-pinned-admin@example.com", true, Role.ADMIN));
+        assertThat(doPostEmpty("/api/v1/admin/merchants/" + merchantId + "/approve", adminToken).getStatus())
+                .isEqualTo(200);
+
+        String updatedProfile = profileJson("Boulangerie Atlas")
+                .replace("\"phone\"", "\"district\":\"Gauthier\",\"latitude\":33.590,\"longitude\":-7.621,\"pickupInstructions\":\"Pickup at the side counter\",\"phone\"");
+        MockHttpServletResponse updated = doPut(updatedProfile, ownerToken);
+
+        assertThat(updated.getStatus()).isEqualTo(200);
+        assertThat(updated.getContentAsString()).contains("\"status\":\"APPROVED\"")
+                .contains("\"latitude\":33.59")
+                .contains("\"longitude\":-7.621")
+                .contains("Pickup at the side counter");
+        assertThat(jdbc.sql("SELECT pickup_instructions FROM merchant.merchants WHERE id=:id")
+                .param("id", java.util.UUID.fromString(merchantId)).query(String.class).single()).isEqualTo("Pickup at the side counter");
+    }
+
+    @Test
     void applyWithoutLoggingInReturns401() throws Exception {
         assertThat(doPost("/api/v1/merchants/apply", profileJson("Boulangerie Atlas"), null).getStatus())
                 .isEqualTo(401);
@@ -50,6 +90,9 @@ class MerchantApplicationIntegrationTest extends AbstractApiIntegrationTest {
                 .isEqualTo(400);
         assertThat(doPost("/api/v1/merchants/apply",
                 profileJson("Boulangerie").replace("BAKERY", "SPACESHIP"), token).getStatus())
+                .isEqualTo(400);
+        assertThat(doPost("/api/v1/merchants/apply",
+                profileJson("Boulangerie").replace("\"phone\"", "\"latitude\":33.589,\"phone\""), token).getStatus())
                 .isEqualTo(400);
     }
 

@@ -3,9 +3,6 @@ package ma.kulha.offer.interfaces.rest;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Objects;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import org.springframework.web.bind.annotation.RequestHeader;
 import java.util.UUID;
 import ma.kulha.offer.application.OfferApplicationService;
@@ -41,7 +38,7 @@ public class MerchantOfferController {
         validateIdempotencyKey(key);
         var offer = offers.create(userId(jwt), body.title(), body.description(), body.category(), body.priceMinor(),
                 body.originalPriceMinor(), body.quantityTotal(), body.pickupStart(), body.pickupEnd(),
-                body.allergensStatus(), body.allergens(), body.foodNotes(), key, key == null ? null : hash("CREATE:" + body));
+                body.allergensStatus(), body.allergens(), body.foodNotes(), key, key == null ? null : CanonicalOfferRequestHash.create(body));
         return ResponseEntity.status(HttpStatus.CREATED).body(OfferResponse.from(offer));
     }
 
@@ -79,7 +76,7 @@ public class MerchantOfferController {
                                              @RequestHeader(value = "Idempotency-Key", required = false) String key) {
         validateIdempotencyKey(key);
         return ResponseEntity.status(HttpStatus.CREATED).body(OfferResponse.from(
-                offers.duplicate(userId(jwt), id, key, key == null ? null : hash("DUPLICATE:" + id))));
+                offers.duplicate(userId(jwt), id, key, key == null ? null : CanonicalOfferRequestHash.duplicate(id))));
     }
     @DeleteMapping("/{id}")
     ResponseEntity<Void> cancel(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) { offers.cancel(userId(jwt), id); return ResponseEntity.noContent().build(); }
@@ -92,12 +89,4 @@ public class MerchantOfferController {
         }
     }
 
-    private static String hash(String value) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
-            return java.util.HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is unavailable", e);
-        }
-    }
 }

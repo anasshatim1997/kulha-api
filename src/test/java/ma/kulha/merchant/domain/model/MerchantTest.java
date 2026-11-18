@@ -111,6 +111,23 @@ class MerchantTest {
     }
 
     @Test
+    void merchantProfileAcceptsAValidShopPinAndRejectsIncompleteOrOutOfRangeCoordinates() {
+        Merchant.Profile pinned = new Merchant.Profile("Pinned Bakery", BusinessType.BAKERY,
+                "12 rue des Fleurs", "Casablanca", "Maarif", "+212600000000", "Lun-Sam 7h-20h",
+                null, 33.589, -7.62);
+        Merchant merchant = Merchant.apply(owner, pinned, NOW);
+        assertThat(merchant.latitude()).isEqualTo(33.589);
+        assertThat(merchant.longitude()).isEqualTo(-7.62);
+
+        assertThatThrownBy(() -> new Merchant.Profile("Bad", BusinessType.BAKERY,
+                "12 rue des Fleurs", "Casablanca", "Maarif", "+212600000000", "Lun-Sam 7h-20h",
+                null, 33.589, null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Merchant.Profile("Bad", BusinessType.BAKERY,
+                "12 rue des Fleurs", "Casablanca", "Maarif", "+212600000000", "Lun-Sam 7h-20h",
+                null, 91.0, -7.62)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void aProfileRejectsBlankAndTooLongFields() {
         assertThatThrownBy(() -> profile("   ")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> profile("x".repeat(121))).isInstanceOf(IllegalArgumentException.class);

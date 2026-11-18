@@ -10,6 +10,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import ma.kulha.offer.domain.event.OfferEventEnvelope;
+import ma.kulha.offer.domain.event.OfferExpiryBatchEvent;
 import ma.kulha.admin.application.AuditApi;
 import ma.kulha.merchant.application.MerchantApi;
 import ma.kulha.offer.domain.model.AllergensStatus;
@@ -74,6 +75,7 @@ public class OfferApplicationService {
             offers.insert(offer);
             Offer persisted = offers.findById(offer.id()).orElseThrow(OfferNotFoundException::new);
             if (idempotencyKey != null) idempotency.save(ownerId, idempotencyKey, requestHash, offer.id());
+            emitAfterCommit("OfferChanged", persisted);
             return persisted;
         });
     }
@@ -113,6 +115,7 @@ public class OfferApplicationService {
             if (foodInfoChanged) {
                 audit.append(ownerId, "OFFER_FOOD_INFO_CHANGED", "OFFER", offerId.toString(), null, "SUCCESS");
             }
+            emitAfterCommit("OfferChanged", updated);
             return updated;
         });
     }
@@ -171,6 +174,7 @@ public class OfferApplicationService {
             offers.insert(copy);
             Offer persisted = offers.findById(copy.id()).orElseThrow(OfferNotFoundException::new);
             if (idempotencyKey != null) idempotency.save(ownerId, idempotencyKey, requestHash, copy.id());
+            emitAfterCommit("OfferChanged", persisted);
             return persisted;
         });
     }
@@ -181,6 +185,7 @@ public class OfferApplicationService {
             Offer current = owned(merchantId, offerId);
             Offer updated = current.cancel(clock.instant());
             if (!offers.update(updated, current.version())) throw new ma.kulha.offer.domain.model.StaleOfferVersionException();
+            emitAfterCommit("OfferChanged", updated);
         });
     }
 
@@ -192,6 +197,7 @@ public class OfferApplicationService {
             if (!offers.update(updated, version)) throw new ma.kulha.offer.domain.model.StaleOfferVersionException();
             audit.append(ownerId, "OFFER_QUANTITY_CHANGED", "OFFER", offerId.toString(),
                     current.quantityTotal() + " -> " + quantity, "SUCCESS");
+            emitAfterCommit("OfferChanged", updated);
             return updated;
         });
     }
@@ -213,6 +219,7 @@ public class OfferApplicationService {
             Offer updated = current.reinstate(clock.instant());
             if (!offers.update(updated, current.version())) throw new ma.kulha.offer.domain.model.StaleOfferVersionException();
             audit.append(adminId, "OFFER_REINSTATED", "OFFER", offerId.toString(), reason, "SUCCESS");
+            emitAfterCommit("OfferChanged", updated);
             return updated;
         });
     }
@@ -221,16 +228,17 @@ public class OfferApplicationService {
         int changed = 0;
         Instant now = clock.instant();
         while (true) {
-            Integer batchChanged = tx.execute(status -> {
+            List<UUID> expiredIds = tx.execute(status -> {
                 List<Offer> expired = offers.expireBatch(now, 500);
                 for (Offer offer : expired) {
                     audit.append(SYSTEM_ACTOR, "OFFER_EXPIRED", "OFFER", offer.id().toString(),
                             "pickup window ended", "SUCCESS");
-                    emitAfterCommit("OfferExpired", offer);
                 }
-                return expired.size();
+                return expired.stream().map(Offer::id).toList();
             });
-            int count = batchChanged == null ? 0 : batchChanged;
+            List<UUID> committedIds = expiredIds == null ? List.of() : expiredIds;
+            int count = committedIds.size();
+            if (!committedIds.isEmpty()) events.publishEvent(new OfferExpiryBatchEvent(committedIds));
             changed += count;
             if (count < 500) return changed;
         }

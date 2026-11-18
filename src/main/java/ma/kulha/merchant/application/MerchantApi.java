@@ -4,7 +4,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /** Public entry point of the merchant module. Other modules (offers, later) call only this. */
-public interface MerchantApi {
+public interface MerchantApi extends MerchantPublicApi {
 
     boolean isApproved(UUID merchantId);
 
@@ -13,4 +13,5 @@ public interface MerchantApi {
     Optional<UUID> resolveActingMerchant(UUID userId);
 
     void lockForOfferMutation(UUID merchantId);
+
 }

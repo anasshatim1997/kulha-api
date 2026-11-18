@@ -23,7 +23,7 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 
 @Order(Ordered.HIGHEST_PRECEDENCE)
-@RestControllerAdvice(assignableTypes = {MerchantOfferController.class, AdminOfferController.class})
+@RestControllerAdvice(assignableTypes = {MerchantOfferController.class, AdminOfferController.class, PublicOfferController.class})
 class OfferExceptionHandler {
     private static final HttpStatusCode UNPROCESSABLE_ENTITY = HttpStatusCode.valueOf(422);
     @ExceptionHandler({OfferNotFoundException.class, MerchantNotFoundException.class})
@@ -37,11 +37,16 @@ class OfferExceptionHandler {
         Map<String, String> fieldErrors = new LinkedHashMap<>();
         e.getBindingResult().getFieldErrors().forEach(error ->
                 fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage()));
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(UNPROCESSABLE_ENTITY,
-                "One or more offer fields are invalid.");
-        problem.setTitle("Unprocessable entity");
+        boolean publicOfferRequest = e.getParameter().getContainingClass() == PublicOfferController.class;
+        HttpStatusCode status = publicOfferRequest ? HttpStatus.BAD_REQUEST : UNPROCESSABLE_ENTITY;
+        String title = publicOfferRequest ? "Bad request" : "Unprocessable entity";
+        String detail = publicOfferRequest ? "The nearby-search request is invalid."
+                : "One or more offer fields are invalid.";
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+        problem.setTitle(title);
         problem.setProperty("fieldErrors", fieldErrors);
-        return ResponseEntity.status(UNPROCESSABLE_ENTITY).body(problem);
+        problem.setProperty("code", publicOfferRequest ? "INVALID_REQUEST" : "VALIDATION_FAILED");
+        return ResponseEntity.status(status).body(problem);
     }
 
     @ExceptionHandler(InvalidOfferWindowException.class)
@@ -49,12 +54,14 @@ class OfferExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(UNPROCESSABLE_ENTITY, e.getMessage());
         problem.setTitle("Unprocessable entity");
         problem.setProperty("fieldErrors", e.fieldErrors());
+        problem.setProperty("code", "VALIDATION_FAILED");
         return ResponseEntity.status(UNPROCESSABLE_ENTITY).body(problem);
     }
     @ExceptionHandler({LockedOfferFieldsException.class, InvalidOfferStateException.class, InvalidOfferDataException.class})
     ResponseEntity<ProblemDetail> unprocessable(RuntimeException e) { return problem(UNPROCESSABLE_ENTITY, "Unprocessable entity", e.getMessage()); }
     private ResponseEntity<ProblemDetail> problem(HttpStatusCode status, String title, String detail) {
         ProblemDetail p = ProblemDetail.forStatusAndDetail(status, detail); p.setTitle(title);
+        p.setProperty("code", status.value() == 404 ? "NOT_FOUND" : status.value() == 409 ? "CONFLICT" : "INVALID_REQUEST");
         return ResponseEntity.status(status).body(p);
     }
 }

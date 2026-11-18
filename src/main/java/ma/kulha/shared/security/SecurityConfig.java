@@ -43,7 +43,10 @@ public class SecurityConfig {
                         "/api/v1/auth/logout",
                         "/api/v1/auth/forgot-password",
                         "/api/v1/auth/reset-password").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/offers", "/api/v1/offers/*").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/offers/nearby").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/me").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/api/v1/me").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/v1/merchants/apply").authenticated()
                 .requestMatchers("/api/v1/merchants/me").authenticated()
                 .requestMatchers("/api/v1/merchants/me/offers", "/api/v1/merchants/me/offers/**").hasRole("MERCHANT")

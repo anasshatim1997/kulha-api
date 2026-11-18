@@ -15,6 +15,10 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
+import java.time.Instant;
+import ma.kulha.identity.domain.model.User;
+import ma.kulha.identity.domain.repository.UserRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Objects;
 
@@ -29,6 +33,9 @@ class RateLimitIntegrationTest {
 
     @Autowired
     WebApplicationContext context;
+
+    @Autowired UserRepository users;
+    @Autowired PasswordEncoder passwordEncoder;
 
     MockMvc mvc;
 
@@ -144,6 +151,32 @@ class RateLimitIntegrationTest {
         assertThat(Long.parseLong(Objects.requireNonNull(limited.getHeader("Retry-After")))).isPositive();
         // Other accounts are not affected.
         assertThat(loginFrom("10.2.0.100", "someone-else@example.com").getStatus()).isEqualTo(401);
+    }
+
+
+    @Test
+    void successfulLoginsDoNotConsumeTheAccountFailureBudget() throws Exception {
+        String email = "success-does-not-count@example.com";
+        User user = User.register(email, passwordEncoder.encode("a-long-enough-password"), "Test User", null, Instant.now());
+        users.insert(user);
+        users.markEmailVerified(user.id(), Instant.now());
+
+        for (int i = 0; i < 10; i++) {
+            int ipSuffix = 30 + i;
+            var response = mvc.perform(post("/api/v1/auth/login")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"email\":\"" + email + "\",\"password\":\"a-long-enough-password\"}")
+                    .with(request -> { request.setRemoteAddr("192.0.2." + ipSuffix); return request; }))
+                    .andReturn().getResponse();
+            assertThat(response.getStatus()).isEqualTo(200);
+        }
+
+        for (int i = 0; i < 10; i++) {
+            assertThat(loginFrom("198.51.100." + (i + 1), email).getStatus()).isEqualTo(401);
+        }
+        MockHttpServletResponse limited = loginFrom("203.0.113.77", email);
+        assertThat(limited.getStatus()).isEqualTo(429);
+        assertThat(limited.getContentAsString()).contains("RATE_LIMITED");
     }
 
     @Test

@@ -1,11 +1,15 @@
 package ma.kulha.shared.web;
 
 import ma.kulha.shared.ratelimit.RateLimitExceededException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 /**
@@ -15,13 +19,31 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 @RestControllerAdvice
 class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
+    @Override
+    protected ResponseEntity<Object> handleExceptionInternal(Exception exception, Object body, HttpHeaders headers,
+                                                               HttpStatusCode status, WebRequest request) {
+        if (body instanceof ProblemDetail problem) {
+            problem.setProperty("code", status.is4xxClientError() ? "INVALID_REQUEST" : "REQUEST_FAILED");
+        }
+        return super.handleExceptionInternal(exception, body, headers, status, request);
+    }
+
     @ExceptionHandler(RateLimitExceededException.class)
     ResponseEntity<ProblemDetail> rateLimited(RateLimitExceededException e) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.TOO_MANY_REQUESTS, "Too many requests. Try again later.");
         problem.setTitle("Too many requests");
+        problem.setProperty("code", "RATE_LIMITED");
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .header("Retry-After", String.valueOf(e.retryAfterSeconds()))
                 .body(problem);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    ResponseEntity<ProblemDetail> statusException(ResponseStatusException e) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(e.getStatusCode(), e.getReason());
+        problem.setTitle(e.getStatusCode().toString());
+        problem.setProperty("code", "INVALID_REQUEST");
+        return ResponseEntity.status(e.getStatusCode()).body(problem);
     }
 }

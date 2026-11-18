@@ -1,6 +1,6 @@
 # Stage map
 
-This delivery is grouped in reviewer-friendly stage sections in `CHANGES.md`; files remain at their repository-relative paths for overlay. The complete self-check is `docs/reviews/M4-self-check.md`.
+This delivery is grouped in reviewer-friendly stage sections in `CHANGELOG.md`; files remain at their repository-relative paths for overlay. The complete self-check is `docs/reviews/M4-self-check.md`.
 
 - Stage 0: merchant pickup instructions, acting-merchant seam, correlation ID propagation, and web OAuth state secret separation.
 - Stage 1: ADR-004, Offers OpenAPI, and event schema.

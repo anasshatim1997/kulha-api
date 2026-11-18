@@ -11,10 +11,12 @@ spring:
       maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
       minimum-idle: ${DB_POOL_MIN_IDLE:2}
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:30000}
-  jpa:
-    open-in-view: false
-    hibernate:
-      ddl-auto: validate
+      # Retire idle connections before typical managed-PostgreSQL/network idle limits.
+      # Keepalive validates idle pooled connections so dead TCP sessions are replaced early.
+      max-lifetime: ${DB_POOL_MAX_LIFETIME_MS:1740000}
+      keepalive-time: ${DB_POOL_KEEPALIVE_TIME_MS:120000}
+      validation-timeout: ${DB_CONNECTION_VALIDATION_TIMEOUT_MS:5000}
+      idle-timeout: ${DB_POOL_IDLE_TIMEOUT_MS:600000}
   flyway:
     enabled: true
   mail:
@@ -47,6 +49,21 @@ app:
   offer:
     reservation-cutoff-minutes: ${APP_OFFER_RESERVATION_CUTOFF_MINUTES:30}
     expiry-delay-ms: ${APP_OFFER_EXPIRY_DELAY_MS:60000}
+    expiry-job-enabled: ${APP_OFFER_EXPIRY_JOB_ENABLED:true}
+  search:
+    elasticsearch:
+      url: ${ELASTICSEARCH_URL:http://localhost:9200}
+      index: ${ELASTICSEARCH_OFFERS_INDEX:kulha-offers-v3}
+      username: ${ELASTICSEARCH_USERNAME:}
+      password: ${ELASTICSEARCH_PASSWORD:}
+      replicas: ${ELASTICSEARCH_REPLICAS:0}
+      connect-timeout-ms: ${ELASTICSEARCH_CONNECT_TIMEOUT_MS:2000}
+      read-timeout-ms: ${ELASTICSEARCH_READ_TIMEOUT_MS:10000}
+      refresh-after-write: ${ELASTICSEARCH_REFRESH_AFTER_WRITE:false}
+      retry-delay-ms: ${ELASTICSEARCH_RETRY_DELAY_MS:1000}
+      initial-delay-ms: ${ELASTICSEARCH_INITIAL_DELAY_MS:1000}
+      sync-events: ${ELASTICSEARCH_SYNC_EVENTS:false}
+      rebuild-on-startup: ${ELASTICSEARCH_REBUILD_ON_STARTUP:true}
   web-base-url: ${APP_WEB_BASE_URL:http://localhost:3000}
   rate-limit:
     bff-secret: ${KULHA_BFF_SHARED_SECRET:}

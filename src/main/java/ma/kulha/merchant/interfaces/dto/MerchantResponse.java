@@ -12,6 +12,9 @@ public record MerchantResponse(
         BusinessType businessType,
         String address,
         String city,
+        String district,
+        Double latitude,
+        Double longitude,
         String phone,
         String openingHours,
         String pickupInstructions,
@@ -20,7 +23,8 @@ public record MerchantResponse(
         Instant createdAt) {
 
     public static MerchantResponse from(Merchant m) {
-        return new MerchantResponse(m.id(), m.name(), m.businessType(), m.address(), m.city(), m.phone(),
+        return new MerchantResponse(m.id(), m.name(), m.businessType(), m.address(), m.city(), m.district(),
+                m.latitude(), m.longitude(), m.phone(),
                 m.openingHours(), m.pickupInstructions(), m.status(), m.decisionReason(), m.createdAt());
     }
 }

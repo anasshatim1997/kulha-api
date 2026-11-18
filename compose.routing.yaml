@@ -1,0 +1,35 @@
+services:
+  osrm-prepare:
+    image: ghcr.io/project-osrm/osrm-backend:v5.27.1
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        if [ ! -f /data/.routing-prepared ]; then
+          test -s /data/morocco-latest.osm.pbf
+          rm -f /data/morocco-latest.osrm* /data/.routing-prepared
+          echo "Extracting Morocco road network..."
+          osrm-extract -p /opt/car.lua /data/morocco-latest.osm.pbf
+          echo "Partitioning Morocco road network..."
+          osrm-partition /data/morocco-latest.osrm
+          echo "Customizing Morocco road network..."
+          osrm-customize /data/morocco-latest.osrm
+          touch /data/.routing-prepared
+          echo "Morocco routing data prepared successfully."
+        else
+          echo "Morocco routing data is already prepared."
+        fi
+    volumes:
+      - ./.osrm-data:/data
+    restart: "no"
+
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:v5.27.1
+    user: "0:0"
+    command: ["osrm-routed", "--algorithm", "mld", "--port", "5000", "/data/morocco-latest.osrm"]
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - ./.osrm-data:/data
+    restart: unless-stopped

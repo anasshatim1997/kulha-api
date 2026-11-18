@@ -13,6 +13,7 @@ import ma.kulha.identity.domain.model.Role;
 import ma.kulha.identity.domain.model.User;
 import ma.kulha.identity.domain.repository.UserRepository;
 import ma.kulha.shared.web.CorrelationIdFilter;
+import ma.kulha.offer.infrastructure.search.ElasticsearchOfferSearch;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -52,6 +53,9 @@ public abstract class AbstractApiIntegrationTest {
     protected JdbcClient jdbc;
 
     @Autowired
+    protected ElasticsearchOfferSearch offerSearch;
+
+    @Autowired
     protected RecordingNotificationApi emails;
 
     protected MockMvc mvc;
@@ -70,6 +74,7 @@ public abstract class AbstractApiIntegrationTest {
         jdbc.sql("DELETE FROM merchant.merchants").update();
         jdbc.sql("DELETE FROM identity.users").update(); // tokens and roles go with it (ON DELETE CASCADE)
         jdbc.sql("TRUNCATE admin.audit_log").update();
+        offerSearch.clear();
         emails.clear();
     }
 

@@ -1,13 +1,17 @@
 package ma.kulha.identity.interfaces.rest;
 
+import jakarta.validation.Valid;
 import java.util.Objects;
 import java.util.UUID;
 import ma.kulha.identity.application.AccountService;
 import ma.kulha.identity.interfaces.dto.MeResponse;
+import ma.kulha.identity.interfaces.dto.UpdateMeRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -24,6 +28,14 @@ public class MeController {
     MeResponse me(@AuthenticationPrincipal Jwt jwt) {
         UUID userId = UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
         return accounts.findById(userId)
+                .map(MeResponse::from)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+    }
+
+    @PutMapping("/api/v1/me")
+    MeResponse updateMe(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody UpdateMeRequest request) {
+        UUID userId = UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
+        return accounts.updateProfile(userId, request.fullName(), request.phone())
                 .map(MeResponse::from)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
     }

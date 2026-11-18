@@ -103,6 +103,26 @@ class JdbcUserRepositoryTest {
     }
 
     @Test
+    void profileCanBeUpdatedWithoutChangingEmailOrRoles() {
+        User user = newUser("profile@example.com");
+        users.insert(user);
+
+        int updated = users.updateProfile(user.id(), "Updated Name", "+212600000000");
+
+        User reloaded = users.findById(user.id()).orElseThrow();
+        assertThat(updated).isEqualTo(1);
+        assertThat(reloaded.fullName()).isEqualTo("Updated Name");
+        assertThat(reloaded.phone()).isEqualTo("+212600000000");
+        assertThat(reloaded.email()).isEqualTo("profile@example.com");
+        assertThat(reloaded.roles()).containsExactly(Role.CUSTOMER);
+    }
+
+    @Test
+    void profileUpdateReturnsZeroForUnknownUser() {
+        assertThat(users.updateProfile(UUID.randomUUID(), "Updated Name", null)).isZero();
+    }
+
+    @Test
     void passwordHashCanBeUpdated() {
         User user = newUser("pwd@example.com");
         users.insert(user);

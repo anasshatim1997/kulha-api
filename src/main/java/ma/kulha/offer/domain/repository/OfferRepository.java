@@ -7,11 +7,15 @@ import java.util.UUID;
 import ma.kulha.offer.domain.model.Offer;
 import ma.kulha.offer.domain.model.OfferStatus;
 import ma.kulha.offer.domain.model.OfferSummary;
+import ma.kulha.offer.domain.model.PublicOfferRow;
 
 public interface OfferRepository {
     void insert(Offer offer);
     Optional<Offer> findById(UUID id);
+    List<Offer> findByIds(List<UUID> ids);
     Optional<Offer> findByIdForUpdate(UUID id);
+    List<Offer> findAfter(UUID afterId, int limit);
+    List<PublicOfferRow> findPublicByIds(List<UUID> ids, Instant reservableAfter, boolean availableOnly);
     List<OfferSummary> listByMerchant(UUID merchantId, OfferStatus status, int limit, int offset);
     long countByMerchant(UUID merchantId, OfferStatus status);
     long countActiveByMerchant(UUID merchantId);
@@ -20,4 +24,5 @@ public interface OfferRepository {
     boolean releaseUnits(UUID offerId, int units);
     List<Offer> expireBatch(Instant now, int limit);
     List<Offer> findPublishedByMerchant(UUID merchantId);
+    Optional<PublicOfferRow> findPublicById(UUID id, Instant reservableAfter);
 }

@@ -20,7 +20,7 @@ import org.springframework.stereotype.Repository;
 class JdbcMerchantRepository implements MerchantRepository {
 
     private static final String SELECT_MERCHANT = """
-            SELECT id, owner_user_id, name, business_type, address, city, phone, opening_hours, pickup_instructions,
+            SELECT id, owner_user_id, name, business_type, address, city, district, latitude, longitude, phone, opening_hours, pickup_instructions,
                    status, decision_reason, decided_by, decided_at, created_at, updated_at
             FROM merchant.merchants
             """;
@@ -35,10 +35,10 @@ class JdbcMerchantRepository implements MerchantRepository {
     public void insert(Merchant m) {
         jdbc.sql("""
                 INSERT INTO merchant.merchants
-                    (id, owner_user_id, name, business_type, address, city, phone, opening_hours, pickup_instructions,
+                    (id, owner_user_id, name, business_type, address, city, district, latitude, longitude, phone, opening_hours, pickup_instructions,
                      status, decision_reason, decided_by, decided_at, created_at, updated_at)
                 VALUES
-                    (:id, :owner, :name, :type, :address, :city, :phone, :hours, :pickupInstructions,
+                    (:id, :owner, :name, :type, :address, :city, :district, :latitude, :longitude, :phone, :hours, :pickupInstructions,
                      :status, :reason, :decidedBy, :decidedAt, :createdAt, :updatedAt)
                 """)
                 .param("id", m.id())
@@ -47,6 +47,9 @@ class JdbcMerchantRepository implements MerchantRepository {
                 .param("type", m.businessType().name())
                 .param("address", m.address())
                 .param("city", m.city())
+                .param("district", m.district(), Types.VARCHAR)
+                .param("latitude", m.latitude(), Types.DOUBLE)
+                .param("longitude", m.longitude(), Types.DOUBLE)
                 .param("phone", m.phone())
                 .param("hours", m.openingHours())
                 .param("pickupInstructions", m.pickupInstructions(), Types.VARCHAR)
@@ -85,7 +88,8 @@ class JdbcMerchantRepository implements MerchantRepository {
     public boolean updateIfStatus(Merchant m, MerchantStatus expectedStatus) {
         int updated = jdbc.sql("""
                 UPDATE merchant.merchants
-                SET name = :name, business_type = :type, address = :address, city = :city,
+                SET name = :name, business_type = :type, address = :address, city = :city, district = :district,
+                    latitude = COALESCE(:latitude, latitude), longitude = COALESCE(:longitude, longitude),
                     phone = :phone, opening_hours = :hours, pickup_instructions = :pickupInstructions, status = :status,
                     decision_reason = :reason, decided_by = :decidedBy, decided_at = :decidedAt,
                     updated_at = :updatedAt
@@ -95,6 +99,9 @@ class JdbcMerchantRepository implements MerchantRepository {
                 .param("type", m.businessType().name())
                 .param("address", m.address())
                 .param("city", m.city())
+                .param("district", m.district(), Types.VARCHAR)
+                .param("latitude", m.latitude(), Types.DOUBLE)
+                .param("longitude", m.longitude(), Types.DOUBLE)
                 .param("phone", m.phone())
                 .param("hours", m.openingHours())
                 .param("pickupInstructions", m.pickupInstructions(), Types.VARCHAR)
@@ -132,6 +139,37 @@ class JdbcMerchantRepository implements MerchantRepository {
         return spec.query(Long.class).single();
     }
 
+    @Override
+    public List<UUID> findApprovedIds(String city, String district) {
+        StringBuilder sql = new StringBuilder("SELECT id FROM merchant.merchants WHERE status='APPROVED'");
+        if (city != null) sql.append(" AND lower(city)=lower(:city)");
+        if (district != null) sql.append(" AND district IS NOT NULL AND lower(district)=lower(:district)");
+        sql.append(" ORDER BY id");
+        JdbcClient.StatementSpec query = jdbc.sql(sql.toString());
+        if (city != null) query = query.param("city", city);
+        if (district != null) query = query.param("district", district);
+        return query.query(UUID.class).list();
+    }
+
+    @Override
+    public List<UUID> findApprovedIdsByName(String query, String city, String district) {
+        StringBuilder sql = new StringBuilder("SELECT id FROM merchant.merchants WHERE status='APPROVED' AND POSITION(lower(:query) IN lower(name)) > 0");
+        if (city != null) sql.append(" AND lower(city)=lower(:city)");
+        if (district != null) sql.append(" AND district IS NOT NULL AND lower(district)=lower(:district)");
+        sql.append(" ORDER BY id");
+        JdbcClient.StatementSpec statement = jdbc.sql(sql.toString()).param("query", query);
+        if (city != null) statement = statement.param("city", city);
+        if (district != null) statement = statement.param("district", district);
+        return statement.query(UUID.class).list();
+    }
+
+    @Override
+    public List<Merchant> findApprovedByIds(java.util.Collection<UUID> ids) {
+        if (ids == null || ids.isEmpty()) return List.of();
+        return jdbc.sql(SELECT_MERCHANT + " WHERE status='APPROVED' AND id IN (:ids) ORDER BY id")
+                .param("ids", ids).query(JdbcMerchantRepository::mapRow).list();
+    }
+
     private static Merchant mapRow(ResultSet rs, int rowNum) throws SQLException {
         return new Merchant(
                 rs.getObject("id", UUID.class),
@@ -140,6 +178,9 @@ class JdbcMerchantRepository implements MerchantRepository {
                 BusinessType.valueOf(rs.getString("business_type")),
                 rs.getString("address"),
                 rs.getString("city"),
+                rs.getString("district"),
+                (Double) rs.getObject("latitude"),
+                (Double) rs.getObject("longitude"),
                 rs.getString("phone"),
                 rs.getString("opening_hours"),
                 rs.getString("pickup_instructions"),

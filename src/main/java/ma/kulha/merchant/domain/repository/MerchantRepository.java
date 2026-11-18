@@ -1,5 +1,6 @@
 package ma.kulha.merchant.domain.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,4 +27,10 @@ public interface MerchantRepository {
     List<Merchant> list(MerchantStatus statusOrNull, int limit, int offset);
 
     long count(MerchantStatus statusOrNull);
+
+    List<UUID> findApprovedIds(String city, String district);
+
+    List<UUID> findApprovedIdsByName(String query, String city, String district);
+
+    List<Merchant> findApprovedByIds(Collection<UUID> ids);
 }

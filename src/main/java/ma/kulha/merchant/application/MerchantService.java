@@ -58,6 +58,7 @@ public class MerchantService {
         } catch (DataIntegrityViolationException alreadyExists) {
             throw new MerchantAlreadyExistsException();
         }
+        events.publishEvent(new MerchantProfileUpdated(merchant.id()));
         return merchant;
     }
 
@@ -72,6 +73,7 @@ public class MerchantService {
         if (!merchants.updateIfStatus(updated, current.status())) {
             throw new InvalidMerchantStateException("The merchant was changed meanwhile. Reload and try again.");
         }
+        events.publishEvent(new MerchantProfileUpdated(updated.id()));
         return updated;
     }
 
@@ -122,10 +124,10 @@ public class MerchantService {
             }
             roleChange.accept(next.ownerUserId());
             audit.append(adminId, auditAction, "MERCHANT", merchantId.toString(), next.decisionReason(), "SUCCESS");
+            if (next.status() == MerchantStatus.SUSPENDED) events.publishEvent(new MerchantSuspended(next.id()));
+            if (next.status() == MerchantStatus.APPROVED) events.publishEvent(new MerchantProfileUpdated(next.id()));
             return next;
         });
-
-        if (updated.status() == MerchantStatus.SUSPENDED) events.publishEvent(new MerchantSuspended(updated.id()));
 
         identity.emailOf(updated.ownerUserId()).ifPresent(email -> {
             Map<String, String> params = updated.decisionReason() == null

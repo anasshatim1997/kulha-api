@@ -86,6 +86,15 @@ class JdbcUserRepository implements UserRepository {
     }
 
     @Override
+    public int updateProfile(UUID userId, String fullName, String phone) {
+        return jdbc.sql("UPDATE identity.users SET full_name = :fullName, phone = :phone, updated_at = now() WHERE id = :id")
+                .param("fullName", fullName)
+                .param("phone", phone, Types.VARCHAR)
+                .param("id", userId)
+                .update();
+    }
+
+    @Override
     public void updatePasswordHash(UUID userId, String passwordHash) {
         jdbc.sql("UPDATE identity.users SET password_hash = :hash, updated_at = now() WHERE id = :id")
                 .param("hash", passwordHash)

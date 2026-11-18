@@ -1,5 +1,7 @@
 package ma.kulha.merchant.application;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import ma.kulha.merchant.domain.model.Merchant;
@@ -33,5 +35,23 @@ class MerchantApiService implements MerchantApi {
     @Override
     public void lockForOfferMutation(UUID merchantId) {
         merchants.lockForOfferMutation(merchantId);
+    }
+
+    @Override
+    public List<UUID> findApprovedMerchantIds(String city, String district) {
+        return merchants.findApprovedIds(city, district);
+    }
+
+    @Override
+    public List<UUID> findApprovedMerchantIdsByName(String query, String city, String district) {
+        return merchants.findApprovedIdsByName(query, city, district);
+    }
+
+    @Override
+    public List<MerchantPublicProfile> findApprovedPublicProfiles(Collection<UUID> merchantIds) {
+        return merchants.findApprovedByIds(merchantIds).stream()
+                .map(m -> new MerchantPublicProfile(m.id(), m.name(), m.address(), m.city(), m.district(),
+                        m.pickupInstructions(), m.latitude(), m.longitude()))
+                .toList();
     }
 }

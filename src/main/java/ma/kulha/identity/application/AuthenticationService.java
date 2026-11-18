@@ -59,15 +59,14 @@ public class AuthenticationService {
         Instant now = clock.instant();
         String normalized = User.normalizeEmail(email);
 
-        RateLimitResult limit = rateLimiter.tryAcquire(
-                "login:acct:" + OpaqueTokens.hash(normalized), 10, Duration.ofMinutes(15));
-        if (!limit.allowed()) {
-            throw new RateLimitExceededException(limit.retryAfterSeconds());
-        }
-
         User user = users.findByEmail(normalized).orElse(null);
         boolean passwordMatches = passwordEncoder.matches(password, user != null ? user.passwordHash() : dummyHash);
         if (user == null || !passwordMatches || user.status() != UserStatus.ACTIVE) {
+            RateLimitResult failureLimit = rateLimiter.tryAcquire(
+                    "login:acct:" + OpaqueTokens.hash(normalized), 10, Duration.ofMinutes(15));
+            if (!failureLimit.allowed()) {
+                throw new RateLimitExceededException(failureLimit.retryAfterSeconds());
+            }
             throw new InvalidCredentialsException();
         }
         return tx.execute(status -> issuePair(user, UUID.randomUUID(), null, now));

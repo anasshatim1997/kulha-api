@@ -11,6 +11,10 @@ spring:
     port: 1025
 
 app:
+  offer:
+    # Avoid the real scheduled expiry worker racing deterministic manual expiry tests.
+    # The job remains enabled by default outside the test profile.
+    expiry-job-enabled: false
   web-base-url: http://localhost:3000
   mail:
     from: no-reply@kulha.local
@@ -24,6 +28,18 @@ app:
 
   rate-limit:
     enabled: false
+  search:
+    elasticsearch:
+      # Integration tests must never clear or write the normal application index.
+      url: http://localhost:9200
+      # Bump the test index name when Elasticsearch field types change. Existing indices
+      # cannot change a field from float to scaled_float in place. Keep the old index untouched.
+      index: kulha-offers-test-v2
+      replicas: 0
+      refresh-after-write: true
+      initial-delay-ms: 86400000
+      sync-events: true
+      rebuild-on-startup: false
 
 # Never bootstrap an admin while the test context starts.
 ADMIN_BOOTSTRAP_EMAIL: ""

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
@@ -356,4 +357,78 @@ class AuthenticationIntegrationTest {
 
         assertThat(stored).isNotEqualTo(raw).isEqualTo(OpaqueTokens.hash(raw));
     }
+    @Test
+    void authenticatedUserCanUpdateTheirOwnNameAndPhone() throws Exception {
+        String token = accessTokenFor();
+
+        MockHttpServletResponse response = mvc.perform(put("/api/v1/me")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fullName\":\"  Updated Customer  \",\"phone\":\" +212600000000 \"}"))
+                .andReturn().getResponse();
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(response.getContentAsString())
+                .contains("\"email\":\"" + EMAIL + "\"")
+                .contains("\"fullName\":\"Updated Customer\"")
+                .contains("\"phone\":\"+212600000000\"")
+                .contains("CUSTOMER")
+                .doesNotContain("passwordHash");
+        assertThat(users.findByEmail(EMAIL).orElseThrow().email()).isEqualTo(EMAIL);
+    }
+
+    @Test
+    void profileUpdateOnlyChangesTheAuthenticatedUsersRecord() throws Exception {
+        User other = createUser("other@example.com");
+        String token = accessTokenFor();
+
+        MockHttpServletResponse response = mvc.perform(put("/api/v1/me")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fullName\":\"Updated Customer\",\"phone\":null}"))
+                .andReturn().getResponse();
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(users.findByEmail(EMAIL).orElseThrow().fullName()).isEqualTo("Updated Customer");
+        assertThat(users.findByEmail("other@example.com").orElseThrow().fullName()).isEqualTo(other.fullName());
+    }
+
+    @Test
+    void updatingProfileRequiresAuthentication() throws Exception {
+        MockHttpServletResponse response = mvc.perform(put("/api/v1/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fullName\":\"Updated Customer\",\"phone\":null}"))
+                .andReturn().getResponse();
+
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    void updatingProfileRejectsBlankName() throws Exception {
+        String token = accessTokenFor();
+        MockHttpServletResponse response = mvc.perform(put("/api/v1/me")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fullName\":\"   \",\"phone\":null}"))
+                .andReturn().getResponse();
+
+        assertThat(response.getStatus()).isEqualTo(400);
+    }
+
+    @Test
+    void updatingProfileCanClearOptionalPhone() throws Exception {
+        String token = accessTokenFor();
+        User user = users.findByEmail(EMAIL).orElseThrow();
+        jdbc.sql("UPDATE identity.users SET phone = '+212611111111' WHERE id = :id").param("id", user.id()).update();
+
+        MockHttpServletResponse response = mvc.perform(put("/api/v1/me")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fullName\":\"Test User\",\"phone\":\"   \"}"))
+                .andReturn().getResponse();
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(users.findByEmail(EMAIL).orElseThrow().phone()).isNull();
+    }
+
 }

@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 /**
- * Per-IP limits on the public authentication endpoints. Account-level limits live in the services.
+ * Per-IP limits on public authentication endpoints and public offer search. Account-level limits live in the services.
  * The BFF client-IP header is trusted only when accompanied by the configured shared secret;
  * otherwise the servlet's remote address is used. See the deployment README for proxy requirements.
  */
@@ -100,10 +100,18 @@ class RateLimitInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull Object handler)
             throws IOException {
-        if (!"POST".equals(request.getMethod())) {
+        Rule rule;
+        if ("GET".equals(request.getMethod()) && "/api/v1/offers".equals(request.getRequestURI())) {
+            rule = new Rule("public-offer-search", 60, Duration.ofMinutes(1));
+        } else if ("POST".equals(request.getMethod()) && "/api/v1/offers/nearby".equals(request.getRequestURI())) {
+            rule = new Rule("public-offer-nearby", 30, Duration.ofMinutes(1));
+        } else if ("GET".equals(request.getMethod()) && "/api/v1/offers/suggestions".equals(request.getRequestURI())) {
+            rule = new Rule("public-offer-suggestions", 90, Duration.ofMinutes(1));
+        } else if ("POST".equals(request.getMethod())) {
+            rule = RULES.get(request.getRequestURI());
+        } else {
             return true;
         }
-        Rule rule = RULES.get(request.getRequestURI());
         if (rule == null) {
             return true;
         }
@@ -119,7 +127,7 @@ class RateLimitInterceptor implements HandlerInterceptor {
         response.setCharacterEncoding("UTF-8");
         response.getWriter().write(
                 "{\"type\":\"about:blank\",\"title\":\"Too many requests\",\"status\":429,"
-                        + "\"detail\":\"Too many requests. Try again later.\"}");
+                        + "\"detail\":\"Too many requests. Try again later.\",\"code\":\"RATE_LIMITED\"}");
         return false;
     }
 }

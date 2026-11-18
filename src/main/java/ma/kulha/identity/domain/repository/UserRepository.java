@@ -21,6 +21,8 @@ public interface UserRepository {
 
     void updatePasswordHash(UUID userId, String passwordHash);
 
+    int updateProfile(UUID userId, String fullName, String phone);
+
     /** Adds a role. Does nothing if the user already has it. */
     void addRole(UUID userId, Role role);
 

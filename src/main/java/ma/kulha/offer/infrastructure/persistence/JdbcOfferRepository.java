@@ -16,6 +16,7 @@ import ma.kulha.offer.domain.model.Offer;
 import ma.kulha.offer.domain.model.OfferCategory;
 import ma.kulha.offer.domain.model.OfferStatus;
 import ma.kulha.offer.domain.model.OfferSummary;
+import ma.kulha.offer.domain.model.PublicOfferRow;
 import ma.kulha.offer.domain.repository.OfferRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -72,9 +73,33 @@ class JdbcOfferRepository implements OfferRepository {
     }
 
     @Override
+    public List<Offer> findByIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) return List.of();
+        return jdbc.sql(SELECT + " WHERE id IN (:ids)").param("ids", ids)
+                .query(JdbcOfferRepository::mapOffer).list();
+    }
+
+    @Override
     public Optional<Offer> findByIdForUpdate(UUID id) {
         return jdbc.sql(SELECT + " WHERE id = :id FOR UPDATE").param("id", id)
                 .query(JdbcOfferRepository::mapOffer).optional();
+    }
+
+    @Override
+    public List<Offer> findAfter(UUID afterId, int limit) {
+        JdbcClient.StatementSpec query = jdbc.sql(SELECT + (afterId == null ? " WHERE TRUE " : " WHERE id > :afterId ") + "ORDER BY id LIMIT :limit").param("limit", limit);
+        if (afterId != null) query = query.param("afterId", afterId);
+        return query.query(JdbcOfferRepository::mapOffer).list();
+    }
+
+    @Override
+    public List<PublicOfferRow> findPublicByIds(List<UUID> ids, Instant reservableAfter, boolean availableOnly) {
+        if (ids == null || ids.isEmpty()) return List.of();
+        return jdbc.sql(publicSelect() + " WHERE id IN (:ids) AND status='PUBLISHED' "
+                        + "AND pickup_end IS NOT NULL AND pickup_end > :reservableAfter "
+                        + "AND (:availableOnly = FALSE OR quantity_total > quantity_reserved)")
+                .param("ids", ids).param("reservableAfter", toDb(reservableAfter)).param("availableOnly", availableOnly)
+                .query(JdbcOfferRepository::mapPublicOffer).list();
     }
 
     @Override
@@ -179,6 +204,36 @@ class JdbcOfferRepository implements OfferRepository {
                 FROM updated ORDER BY pickup_end, id
                 """).param("now", toDb(now), Types.TIMESTAMP_WITH_TIMEZONE).param("limit", limit)
                 .query(JdbcOfferRepository::mapOffer).list();
+    }
+
+    @Override
+    public Optional<PublicOfferRow> findPublicById(UUID id, Instant reservableAfter) {
+        return jdbc.sql(publicSelect() + " WHERE id=:id AND status='PUBLISHED' AND pickup_end IS NOT NULL "
+                        + "AND pickup_end > :reservableAfter AND quantity_total > quantity_reserved")
+                .param("id", id).param("reservableAfter", toDb(reservableAfter))
+                .query(JdbcOfferRepository::mapPublicOffer).optional();
+    }
+
+    private static String publicSelect() {
+        return """
+                SELECT id, merchant_id, title, description, category, price_minor, original_price_minor,
+                       quantity_total, quantity_total - quantity_reserved AS available_units,
+                       pickup_start, pickup_end, allergens_status, allergens, food_notes, published_at
+                FROM offer.offers
+                """;
+    }
+
+    private static PublicOfferRow mapPublicOffer(ResultSet rs, int row) throws SQLException {
+        Array array = rs.getArray("allergens");
+        List<String> allergens = array == null ? List.of() : Arrays.asList((String[]) array.getArray());
+        return new PublicOfferRow(rs.getObject("id", UUID.class), rs.getObject("merchant_id", UUID.class),
+                rs.getString("title"), rs.getString("description"), OfferCategory.valueOf(rs.getString("category")),
+                rs.getInt("price_minor"), (Integer) rs.getObject("original_price_minor"),
+                rs.getInt("quantity_total"), rs.getInt("available_units"),
+                toInstant(rs.getObject("pickup_start", OffsetDateTime.class)),
+                toInstant(rs.getObject("pickup_end", OffsetDateTime.class)),
+                AllergensStatus.valueOf(rs.getString("allergens_status")), allergens, rs.getString("food_notes"),
+                toInstant(rs.getObject("published_at", OffsetDateTime.class)));
     }
 
     private static Offer mapOffer(ResultSet rs, int row) throws SQLException {

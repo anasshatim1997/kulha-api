@@ -6,6 +6,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
@@ -47,6 +49,33 @@ class OfferListStatementCountIntegrationTest extends AbstractApiIntegrationTest 
         assertThat(items).hasSize(20);
         assertThat(total).isEqualTo(20);
         assertThat(statementCount.get()).isEqualTo(2);
+    }
+
+    @Test
+    void publicOfferHydrationUsesOneBoundedQueryAfterElasticsearchReturnsIds() throws SQLException {
+        UUID merchantId = UUID.randomUUID();
+        jdbc.sql("""
+                INSERT INTO offer.offers (id, merchant_id, title, description, category, price_minor,
+                    quantity_total, quantity_reserved, pickup_start, pickup_end, allergens_status, allergens,
+                    status, version, created_at, updated_at)
+                SELECT gen_random_uuid(), :merchant, 'Public item', 'Public description', 'OTHER', 500,
+                    2, 0, now() + interval '1 hour', now() + interval '2 hours', 'UNKNOWN', '{}',
+                    'PUBLISHED', 0, now(), now()
+                FROM generate_series(1, 20)
+                """).param("merchant", merchantId).update();
+        List<UUID> ids = jdbc.sql("SELECT id FROM offer.offers WHERE merchant_id = :merchant ORDER BY id")
+                .param("merchant", merchantId).query(UUID.class).list();
+        AtomicInteger statementCount = new AtomicInteger();
+        DataSource countingDataSource = new DelegatingDataSource(dataSource) {
+            @Override public Connection getConnection() throws SQLException {
+                return countStatements(super.getConnection(), statementCount);
+            }
+        };
+        JdbcOfferRepository repository = new JdbcOfferRepository(JdbcClient.create(countingDataSource), 30);
+        var items = repository.findPublicByIds(ids, Instant.now(), true);
+        assertThat(items).hasSize(20);
+        assertThat(items).allSatisfy(item -> assertThat(item.availableUnits()).isEqualTo(2));
+        assertThat(statementCount.get()).isEqualTo(1);
     }
 
     private static Connection countStatements(Connection connection, AtomicInteger count) {
