@@ -162,14 +162,27 @@ class ElasticsearchOfferSearchAdapter implements ElasticsearchOfferSearch {
                 .retrieve().toBodilessEntity();
     }
 
+    /** Arabic analyzer fields must contain Arabic-script source text, never a copied Latin value. */
+    static String arabicTextOrNull(String value) {
+        if (value == null || value.isBlank()) return null;
+        boolean hasArabic = value.codePoints().anyMatch(codePoint ->
+                (codePoint >= 0x0600 && codePoint <= 0x06FF)
+                        || (codePoint >= 0x0750 && codePoint <= 0x077F)
+                        || (codePoint >= 0x08A0 && codePoint <= 0x08FF)
+                        || (codePoint >= 0xFB50 && codePoint <= 0xFDFF)
+                        || (codePoint >= 0xFE70 && codePoint <= 0xFEFF)
+                        || (codePoint >= 0x1EE00 && codePoint <= 0x1EEFF));
+        return hasArabic ? value : null;
+    }
+
     private Map<String, Object> documentMap(OfferSearchDocument document) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("offerId", document.id().toString());
         body.put("merchantId", document.merchantId().toString());
         body.put("title", document.title());
-        body.put("titleArabic", document.title());
+        body.put("titleArabic", arabicTextOrNull(document.title()));
         body.put("description", document.description());
-        body.put("descriptionArabic", document.description());
+        body.put("descriptionArabic", arabicTextOrNull(document.description()));
         body.put("category", document.category());
         body.put("priceMinor", document.priceMinor());
         body.put("originalPriceMinor", document.originalPriceMinor());
@@ -180,11 +193,11 @@ class ElasticsearchOfferSearchAdapter implements ElasticsearchOfferSearch {
         body.put("publishedAt", document.publishedAt() == null ? null : document.publishedAt().toString());
         body.put("createdAt", document.createdAt().toString());
         body.put("merchantName", document.merchantName());
-        body.put("merchantNameArabic", document.merchantName());
+        body.put("merchantNameArabic", arabicTextOrNull(document.merchantName()));
         body.put("city", document.city());
-        body.put("cityArabic", document.city());
+        body.put("cityArabic", arabicTextOrNull(document.city()));
         body.put("district", document.district());
-        body.put("districtArabic", document.district());
+        body.put("districtArabic", arabicTextOrNull(document.district()));
         body.put("merchantAddress", document.merchantAddress());
         body.put("pickupInstructions", document.pickupInstructions());
         body.put("allergens", document.allergens());
