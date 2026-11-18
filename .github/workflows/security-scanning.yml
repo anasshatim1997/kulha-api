@@ -16,7 +16,13 @@ jobs:
         with:
           fetch-depth: 0
       - name: Java toolchain
-        run: java -version
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Make Maven wrapper executable
+        run: chmod +x mvnw
       - name: Maven verification
         run: ./mvnw --batch-mode clean verify
       - name: Dependency vulnerability scan
