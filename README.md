@@ -4,7 +4,7 @@ Backend of **KULHA!**, an anti-food-waste marketplace for Morocco: merchants pub
 
 This is a **modular monolith** (Spring Boot + PostgreSQL). Module boundaries follow DDD so a module can be extracted into its own service later, but for the pilot there is **one deployable application**. See `docs/adr/001-modular-monolith.md`.
 
-> Status: Sprint 1 (foundation). Not production-ready. Never mark a build or test as passing unless you have seen the real result.
+> Current implementation: identity and email verification, Google OIDC sign-in, merchant onboarding and approval, offer publication and discovery, Elasticsearch-backed search/nearby discovery, reservations and pickup workflows, notifications, and administrative/audit capabilities are present in the codebase. This is an evolving pilot application; verify the current deployment configuration and CI result before treating any environment as production-ready.
 
 ## Stack
 
@@ -14,12 +14,12 @@ This is a **modular monolith** (Spring Boot + PostgreSQL). Module boundaries fol
 | Framework | Spring Boot 4.1.x (version pinned in `pom.xml`) |
 | Build | Maven, wrapper included (`mvnw` / `mvnw.cmd`) |
 | Database | PostgreSQL 16, schema managed by Flyway |
-| Security | Spring Security, deny-by-default (self-issued JWT authentication arrives in Sprint 2) |
+| Security | Spring Security, JWT resource-server validation, email verification, password reset, Google OIDC/BFF integration, and rate limiting |
 | Tests | JUnit 5, ArchUnit (module boundaries) |
-| Local infra | Docker Compose, PostgreSQL only |
-| CI | GitHub Actions (`.github/workflows/ci.yaml`) with a PostgreSQL service container |
+| Search | Elasticsearch 8.x (HTTP API via Spring RestClient) |\n| Local infra | Docker Compose, PostgreSQL, Mailpit, and Elasticsearch |
+| CI | GitHub Actions (`.github/workflows/ci.yml`) with PostgreSQL and Elasticsearch service containers |
 
-Not in the project yet, on purpose: RabbitMQ, Redis and SMTP (Sprint 8), the payment provider (Sprint 9), Testcontainers and OpenAPI docs (when the first endpoints need them).
+Optional infrastructure such as RabbitMQ, Redis, and an external payment provider is not assumed by the current core flow. SMTP is configured through Spring Mail; local development uses the configured local mail service. Check the actual compose files and environment for the services enabled in your setup.
 
 ## Prerequisites
 
@@ -89,7 +89,7 @@ $env:DB_PORT="5433"
 curl http://localhost:8080/actuator/health
 ```
 
-Expected: `{"groups":["liveness","readiness"],"status":"UP"}`. Any other URL returns 403, because everything is denied by default.
+Expected: a JSON health response with `status: UP` when the database and required application dependencies are healthy. Public API routes are explicitly configured; protected routes require the appropriate authentication and authorization.
 
 If health shows `DOWN`, the database is not reachable: check `docker compose ps`.
 
@@ -135,7 +135,7 @@ Priority scenarios, added as the modules arrive:
 
 ## Continuous integration
 
-`.github/workflows/ci.yaml` runs `./mvnw clean verify` on every push to `main` and on every pull request, on a GitHub-hosted Ubuntu machine with a temporary PostgreSQL 16 service. Check the **Actions** tab after each push and fix a red build before continuing. The password in that file belongs to a throwaway CI database and is not a real secret.
+`.github/workflows/ci.yml` runs `./mvnw --batch-mode clean verify` on pushes to `main` and pull requests, using GitHub-hosted Ubuntu with PostgreSQL 16 and Elasticsearch services. Check the **Actions** tab after each push and fix a red build before continuing. The password in that file belongs to a throwaway CI database and is not a real secret.
 
 ## Project structure
 
@@ -162,7 +162,7 @@ kulha-api/
   pom.xml
 ```
 
-Planned layout inside each module (created when the module is built):
+Typical layout inside each module:
 
 ```
 <module>/
