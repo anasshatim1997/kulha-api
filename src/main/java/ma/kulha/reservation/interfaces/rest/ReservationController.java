@@ -28,9 +28,9 @@ public class ReservationController {
     ReservationController(ReservationService reservations) { this.reservations = reservations; }
     @GetMapping("/availability")
     ReservationAvailabilityResponse availability(@RequestParam UUID offerId,
-            @RequestParam(required = false) UUID merchantId,
-            @RequestParam(required = false) Instant from, @RequestParam(required = false) Instant to) {
-        return reservations.availability(offerId, merchantId, from, to);
+            @RequestParam(required = false) UUID merchantId, @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to, @RequestParam(defaultValue = "1") int quantity) {
+        return reservations.availability(offerId, merchantId, from, to, quantity);
     }
     @PostMapping
     ResponseEntity<ReservationResponse> create(@Valid @RequestBody CreateReservationRequest request,

@@ -39,7 +39,9 @@ public class ReservationService {
         this.maximumQuantity = maximumQuantity;
     }
     @Transactional(readOnly = true)
-    public ReservationAvailabilityResponse availability(UUID offerId, UUID merchantId, Instant from, Instant to) {
+    public ReservationAvailabilityResponse availability(UUID offerId, UUID merchantId, Instant from, Instant to, int quantity) {
+        if (quantity < 1 || quantity > 500)
+            throw new InvalidReservationRequestException("quantity must be between 1 and 500.");
         if (from != null && to != null && !to.isAfter(from))
             throw new InvalidReservationRequestException("The requested date window is invalid.");
         if (from != null && to != null && ChronoUnit.DAYS.between(from, to) > 31)
@@ -47,16 +49,19 @@ public class ReservationService {
         OfferSnapshot offer = offers.snapshot(offerId).orElse(null);
         if (offer == null || offer.pickupStart() == null || offer.pickupEnd() == null
                 || offer.status() != OfferStatus.PUBLISHED || (merchantId != null && !merchantId.equals(offer.merchantId())))
-            return unavailable(offerId);
+            return unavailable(offerId, quantity);
         Instant now = clock.instant();
         boolean intersects = (from == null || offer.pickupEnd().isAfter(from))
                 && (to == null || offer.pickupStart().isBefore(to));
         boolean reservable = intersects && offer.pickupStart().isAfter(now)
                 && offer.availableUnits() > 0 && offers.isReservable(offerId, now);
         if (!reservable) return new ReservationAvailabilityResponse(offerId, offer.title(), offer.merchantId(),
-                offer.merchantName(), Math.max(0, offer.availableUnits()), 0, offer.priceMinor(), "MAD", List.of());
+                offer.merchantName(), Math.max(0, offer.availableUnits()), 0, quantity,
+                offer.priceMinor(), null, "MAD", List.of());
+        int max = Math.min(maximumQuantity, offer.availableUnits());
+        Integer total = quantity <= max ? Math.multiplyExact(offer.priceMinor(), quantity) : null;
         return new ReservationAvailabilityResponse(offerId, offer.title(), offer.merchantId(), offer.merchantName(),
-                offer.availableUnits(), Math.min(maximumQuantity, offer.availableUnits()), offer.priceMinor(), "MAD",
+                offer.availableUnits(), max, quantity, offer.priceMinor(), total, "MAD",
                 List.of(new PickupSlot(offer.pickupStart(), offer.pickupEnd(), offer.availableUnits())));
     }
     @Transactional
@@ -76,7 +81,6 @@ public class ReservationService {
             throw new ReservationConflictException("The requested quantity exceeds the currently available limit.");
         if (!offers.tryHoldUnits(request.offerId(), request.quantity()))
             throw new ReservationConflictException("This basket no longer has enough available quantity.");
-        // The successful inventory hold locks price and pickup fields in the offer module.
         OfferSnapshot locked = offers.snapshot(request.offerId())
                 .orElseThrow(() -> new ReservationUnavailableException("This basket is no longer available."));
         if (!locked.pickupStart().equals(request.pickupStart()) || !locked.pickupEnd().equals(request.pickupEnd())
@@ -132,7 +136,8 @@ public class ReservationService {
         offers.releaseUnits(reservation.offerId(), reservation.quantity());
         return ReservationResponse.from(cancelled, locale, now);
     }
-    private static ReservationAvailabilityResponse unavailable(UUID offerId) {
-        return new ReservationAvailabilityResponse(offerId, null, null, null, 0, 0, null, "MAD", List.of());
+    private static ReservationAvailabilityResponse unavailable(UUID offerId, int quantity) {
+        return new ReservationAvailabilityResponse(offerId, null, null, null, 0, 0, quantity,
+                null, null, "MAD", List.of());
     }
 }

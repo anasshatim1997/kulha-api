@@ -23,8 +23,11 @@ paths:
         - in: query
           name: to
           schema: { type: string, format: date-time }
+        - in: query
+          name: quantity
+          schema: { type: integer, minimum: 1, default: 1, maximum: 500 }
       responses:
-        "200": { description: Live stock and pickup windows. Empty slots means unavailable. }
+        "200": { description: Live stock, pickup windows, and server-computed subtotal for requested quantity. }
   /reservations:
     get:
       security: [{ bearerAuth: [] }]
@@ -90,4 +93,3 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
