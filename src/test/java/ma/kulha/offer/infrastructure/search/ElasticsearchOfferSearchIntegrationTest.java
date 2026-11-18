@@ -73,10 +73,13 @@ class ElasticsearchOfferSearchIntegrationTest {
         List<OfferSearchDocument> arabicSuggestions = search.suggest("مس", "Casablanca", "Maarif", 6, now);
         OfferSearchPage results = search.search("msemen", null, null, null, null,
                 "Casablanca", "Maarif", true, "pickup_end", 0, 10, now);
+        OfferSearchPage typoResults = search.search("mseemn", null, null, null, null,
+                "Casablanca", "Maarif", true, "pickup_end", 0, 10, now);
 
         assertThat(suggestions).extracting(OfferSearchDocument::id).contains(offerId);
         assertThat(arabicSuggestions).extracting(OfferSearchDocument::id).contains(offerId);
         assertThat(results.ids()).contains(offerId);
         assertThat(results.total()).isEqualTo(1);
+        assertThat(typoResults.ids()).contains(offerId);
     }
 }
