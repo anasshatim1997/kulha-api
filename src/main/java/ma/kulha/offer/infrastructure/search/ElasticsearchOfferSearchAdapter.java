@@ -162,17 +162,43 @@ class ElasticsearchOfferSearchAdapter implements ElasticsearchOfferSearch {
                 .retrieve().toBodilessEntity();
     }
 
-    /** Arabic analyzer fields must contain Arabic-script source text, never a copied Latin value. */
+    /**
+     * Extract only Arabic-script text for Arabic analyzer fields. A mixed value such as
+     * "Msemen maison مسمن منزلي" must not mirror its Latin tokens into the Arabic field.
+     */
     static String arabicTextOrNull(String value) {
         if (value == null || value.isBlank()) return null;
-        boolean hasArabic = value.codePoints().anyMatch(codePoint ->
-                (codePoint >= 0x0600 && codePoint <= 0x06FF)
-                        || (codePoint >= 0x0750 && codePoint <= 0x077F)
-                        || (codePoint >= 0x08A0 && codePoint <= 0x08FF)
-                        || (codePoint >= 0xFB50 && codePoint <= 0xFDFF)
-                        || (codePoint >= 0xFE70 && codePoint <= 0xFEFF)
-                        || (codePoint >= 0x1EE00 && codePoint <= 0x1EEFF));
-        return hasArabic ? value : null;
+        StringBuilder arabic = new StringBuilder();
+        boolean hasArabic = false;
+        for (int offset = 0; offset < value.length();) {
+            int codePoint = value.codePointAt(offset);
+            offset += Character.charCount(codePoint);
+            Character.UnicodeScript script = Character.UnicodeScript.of(codePoint);
+            int type = Character.getType(codePoint);
+            boolean arabicScript = script == Character.UnicodeScript.ARABIC;
+            boolean mark = type == Character.NON_SPACING_MARK
+                    || type == Character.COMBINING_SPACING_MARK
+                    || type == Character.ENCLOSING_MARK;
+            boolean separator = Character.isWhitespace(codePoint)
+                    || type == Character.CONNECTOR_PUNCTUATION
+                    || type == Character.DASH_PUNCTUATION
+                    || type == Character.START_PUNCTUATION
+                    || type == Character.END_PUNCTUATION
+                    || type == Character.INITIAL_QUOTE_PUNCTUATION
+                    || type == Character.FINAL_QUOTE_PUNCTUATION
+                    || type == Character.OTHER_PUNCTUATION;
+            if (arabicScript) {
+                arabic.appendCodePoint(codePoint);
+                hasArabic = true;
+            } else if (mark || separator) {
+                arabic.appendCodePoint(codePoint);
+            } else {
+                arabic.append(' ');
+            }
+        }
+        if (!hasArabic) return null;
+        String result = arabic.toString().replaceAll("\\s+", " ").trim();
+        return result.isEmpty() ? null : result;
     }
 
     private Map<String, Object> documentMap(OfferSearchDocument document) {
@@ -251,7 +277,7 @@ class ElasticsearchOfferSearchAdapter implements ElasticsearchOfferSearch {
             bool.put("must", List.of(Map.of("multi_match", Map.of("query", query,
                     "fields", List.of("title^5", "titleArabic^5", "merchantName^3", "merchantNameArabic^3",
                             "description", "descriptionArabic", "city", "cityArabic", "district", "districtArabic"),
-                    "fuzziness", "AUTO", "operator", "and"))));
+                    "fuzziness", "AUTO", "max_expansions", 25, "operator", "and"))));
         } else {
             bool.put("must", List.of(Map.of("match_all", Map.of())));
         }
