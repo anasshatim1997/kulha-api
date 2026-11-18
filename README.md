@@ -142,24 +142,25 @@ Priority scenarios, added as the modules arrive:
 
 ```
 kulha-api/
-  .github/workflows/ci.yaml
+  .github/workflows/ci.yml
   docs/adr/                  # architecture decision records
   src/main/java/ma/kulha/
     KulhaApiApplication.java
-    shared/security/         # SecurityConfig (deny by default, health open)
-    identity/                # accounts, roles, email verification   (Sprint 2)
-    merchant/                # merchant profile, admin approval      (Sprint 3)
-    offer/                   # offers, publication rules             (Sprint 4-5)
-    reservation/             # availability, orders, pickup code     (Sprint 6-7)
-    notification/            # emails, outbox consumers              (Sprint 8)
-    payment/                 # payment model, pay-at-pickup default  (Sprint 9)
-    admin/                   # moderation, audit log                 (Sprint 10)
+    shared/security/         # SecurityConfig, JWT and BFF trust boundaries
+    identity/                # accounts, roles, verification, password reset, Google OIDC
+    merchant/                # merchant profiles, applications and approval
+    offer/                   # offer lifecycle, Elasticsearch indexing and discovery
+    reservation/             # availability, reservations and pickup workflows
+    notification/            # email notifications and templates
+    payment/                 # payment domain and provider boundary
+    admin/                   # moderation and audit capabilities
   src/main/resources/
     application.yml
     db/migration/            # Flyway: V1__init_schemas.sql, ...
   src/test/java/ma/kulha/
     architecture/            # ArchUnit boundary tests
-  compose.yaml               # local PostgreSQL
+  compose.yaml               # local PostgreSQL and Mailpit
+  infra/elasticsearch/       # local Elasticsearch service
   pom.xml
 ```
 
@@ -236,7 +237,7 @@ A Google-verified email can link to an existing active account with the same nor
 ## Security baseline
 
 - No secrets in Git, images or logs. `.env` is in `.gitignore`. Check `git status` before every commit.
-- Spring Security denies everything except `/actuator/health`. Open routes explicitly, one at a time.
+- Spring Security uses an explicit allowlist for public authentication and health routes; protected APIs require validated authentication and authorization. Keep the allowlist narrow.
 - Do not expose actuator or management endpoints publicly in staging or production.
 - Never store card data.
 - Do not log passwords, tokens, cookies or unnecessary personal data.
@@ -265,22 +266,13 @@ Architecture decisions are recorded in `docs/adr/`:
 - README and ADRs updated when needed
 - No known critical regression left silently
 
-## Roadmap (backend)
+## Current implementation areas
 
-| Sprint | Backend focus |
-|---|---|
-| 1 | Repo, CI, PostgreSQL, health endpoint, module skeleton, ArchUnit, ADRs |
-| 2 | Accounts, email verification, roles, authorization |
-| 3 | Merchant profile, admin approval |
-| 4-5 | Offers: create, publish, disable, catalog |
-| 6-7 | Reservation, atomic stock, pickup code |
-| 8 | Outbox, RabbitMQ, SMTP, Redis (rate limits, cache) |
-| 9 | Payment (pay-at-pickup unless a provider is approved) |
-| 10-12 | Admin and audit, security hardening, backup and restore, release candidate |
+The codebase is organized around identity, merchant, offer, reservation, notification, payment, and admin modules. Consult the source packages, migrations, API contracts, and ADRs for current behavior; do not use the original sprint plan as a status report.
 
-## Out of scope for the pilot
+## Product boundary
 
-Microservice deployments, Kubernetes, native mobile app, delivery, wallet or loyalty, AI features.
+KULHA is a pickup-first Moroccan surplus-food marketplace. Do not introduce delivery assumptions into reservation or offer flows without an explicit product decision. Keep the modular-monolith architecture; see `docs/adr/001-modular-monolith.md`.
 
 ## Confidentiality
 
