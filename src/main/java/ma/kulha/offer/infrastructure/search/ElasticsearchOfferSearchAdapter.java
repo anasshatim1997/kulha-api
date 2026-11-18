@@ -277,7 +277,7 @@ class ElasticsearchOfferSearchAdapter implements ElasticsearchOfferSearch {
             bool.put("must", List.of(Map.of("multi_match", Map.of("query", query,
                     "fields", List.of("title^5", "titleArabic^5", "merchantName^3", "merchantNameArabic^3",
                             "description", "descriptionArabic", "city", "cityArabic", "district", "districtArabic"),
-                    "fuzziness", "AUTO", "operator", "and"))));
+                    "fuzziness", "AUTO", "max_expansions", 25, "operator", "and"))));
         } else {
             bool.put("must", List.of(Map.of("match_all", Map.of())));
         }
