@@ -1,0 +1,93 @@
+openapi: 3.1.0
+info:
+  title: KULHA Reservations API
+  version: 1.0.0
+  description: Customer pickup reservations. Prices and inventory are authoritative on the server.
+servers:
+  - url: /api/v1
+paths:
+  /reservations/availability:
+    get:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: offerId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: merchantId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+      responses:
+        "200": { description: Live stock and pickup windows. Empty slots means unavailable. }
+  /reservations:
+    get:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [upcoming, past, cancelled, all], default: upcoming }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 0, default: 0 }
+        - in: query
+          name: size
+          schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
+      responses:
+        "200": { description: Customer reservations with server-derived classification. }
+    post:
+      security: [{ bearerAuth: [] }]
+      description: Creates and confirms a pickup reservation. Client prices are rejected; the server reads current offer pricing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [offerId, quantity, pickupStart, pickupEnd]
+              properties:
+                offerId: { type: string, format: uuid }
+                quantity: { type: integer, minimum: 1 }
+                pickupStart: { type: string, format: date-time }
+                pickupEnd: { type: string, format: date-time }
+                priceMinor: { type: integer, deprecated: true, description: Rejected; server calculated. }
+                totalPriceMinor: { type: integer, deprecated: true, description: Rejected; server calculated. }
+      responses:
+        "201": { description: Confirmed reservation with reference and pickup code. }
+        "409": { description: Inventory or pickup window conflict. }
+  /reservations/{reference}:
+    get:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: reference
+          required: true
+          schema: { type: string }
+        - in: header
+          name: Accept-Language
+          schema: { type: string, enum: [en, fr, ar] }
+      responses:
+        "200": { description: Reservation snapshot for owner or authorized staff. }
+        "404": { description: Missing or unauthorized reservation. }
+  /reservations/{reference}/cancel:
+    patch:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: reference
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Cancelled reservation and released inventory. }
+        "409": { description: Reservation is no longer cancellable. }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
