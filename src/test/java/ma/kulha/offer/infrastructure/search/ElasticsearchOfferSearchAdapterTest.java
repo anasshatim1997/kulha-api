@@ -78,6 +78,31 @@ class ElasticsearchOfferSearchAdapterTest {
     }
 
     @Test
+    void mixedLanguageValuesKeepOnlyArabicScriptInArabicMirrorFields() throws Exception {
+        ElasticsearchOfferSearchAdapter adapter = new ElasticsearchOfferSearchAdapter(
+                RestClient.builder(), new ObjectMapper(), "http://localhost:9200",
+                "kulha-offers-test-v2", "", "", 0, 2000, 10000, false);
+        Method documentMapMethod = ElasticsearchOfferSearchAdapter.class
+                .getDeclaredMethod("documentMap", OfferSearchDocument.class);
+        documentMapMethod.setAccessible(true);
+
+        OfferSearchDocument mixed = sampleDocument("Msemen maison مسمن منزلي",
+                "Casablanca الدار البيضاء", "Maarif المعاريف");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> mixedMap = (Map<String, Object>) documentMapMethod.invoke(adapter, mixed);
+
+        assertThat(mixedMap).containsEntry("titleArabic", "مسمن منزلي")
+                .containsEntry("cityArabic", "الدار البيضاء")
+                .containsEntry("districtArabic", "المعاريف");
+    }
+
+    @Test
+    void arabicExtractionReturnsNullWhenThereAreNoArabicScriptCharacters() {
+        assertThat(ElasticsearchOfferSearchAdapter.arabicTextOrNull("Msemen maison")).isNull();
+        assertThat(ElasticsearchOfferSearchAdapter.arabicTextOrNull("   ")).isNull();
+    }
+
+    @Test
     void bulkRequestsUseUtf8ForFrenchAndArabicOfferText() {
         assertThat(ElasticsearchOfferSearchAdapter.NDJSON.getCharset())
                 .isEqualTo(StandardCharsets.UTF_8);
