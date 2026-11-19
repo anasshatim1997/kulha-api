@@ -121,7 +121,7 @@ public record Offer(
         return new Offer(id, merchantId, newTitle, newDescription, newCategory, newPriceMinor,
                 newOriginalPriceMinor, newQuantityTotal, quantityReserved, reservationStartedAt, newPickupStart, newPickupEnd,
                 newAllergensStatus, newAllergens, newFoodNotes, status, publishedAt,
-                version + 1, createdAt, now, newImageUrl);
+                version + 1, createdAt, now, newImageUrl == null ? imageUrl : newImageUrl);
     }
 
     public Offer publish(Instant now) {
