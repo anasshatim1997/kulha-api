@@ -22,4 +22,5 @@ public record OfferRequest(
         @NotNull AllergensStatus allergensStatus,
         List<String> allergens,
         @Size(max = 500) String foodNotes,
-        Long version) { }
+        Long version,
+        @jakarta.validation.constraints.Size(max = 2048) String imageUrl) { }
