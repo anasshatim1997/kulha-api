@@ -23,4 +23,11 @@ public record OfferRequest(
         List<String> allergens,
         @Size(max = 500) String foodNotes,
         Long version,
-        @jakarta.validation.constraints.Size(max = 2048) String imageUrl) { }
+        @jakarta.validation.constraints.Size(max = 2048) String imageUrl) {
+    public OfferRequest(String title, String description, OfferCategory category, int priceMinor,
+                        Integer originalPriceMinor, int quantityTotal, Instant pickupStart, Instant pickupEnd,
+                        AllergensStatus allergensStatus, List<String> allergens, String foodNotes, Long version) {
+        this(title, description, category, priceMinor, originalPriceMinor, quantityTotal, pickupStart, pickupEnd,
+                allergensStatus, allergens, foodNotes, version, null);
+    }
+}
