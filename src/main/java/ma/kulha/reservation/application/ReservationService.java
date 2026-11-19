@@ -139,7 +139,7 @@ public class ReservationService {
         return ReservationResponse.from(cancelled, locale, now);
     }
     private static ReservationAvailabilityResponse unavailable(UUID offerId, int quantity) {
-        return new ReservationAvailabilityResponse(offerId, null, null, null, null, null, null,
+        return new ReservationAvailabilityResponse(offerId, null, null, null, null, null, null, null,
                 0, 0, quantity, null, null, null, null, null, "MAD", List.of());
     }
 }
