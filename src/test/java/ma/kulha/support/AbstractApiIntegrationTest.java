@@ -28,81 +28,53 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
-/**
- * Base class for API tests: a clean database, MockMvc with Spring Security, a recording notification
- * double, and small helpers. Helper names avoid "get", "post" and "put" so they never hide
- * the static imports of the same names.
- */
 @SpringBootTest
 @ActiveProfiles("test")
 @Import(TestNotificationConfig.class)
 public abstract class AbstractApiIntegrationTest {
-
     protected static final String PASSWORD = "a-long-enough-password";
-
-    @Autowired
-    protected WebApplicationContext context;
-
-    @Autowired
-    protected UserRepository users;
-
-    @Autowired
-    protected PasswordEncoder passwordEncoder;
-
-    @Autowired
-    protected JdbcClient jdbc;
-
-    @Autowired
-    protected ElasticsearchOfferSearch offerSearch;
-
-    @Autowired
-    protected RecordingNotificationApi emails;
-
+    @Autowired protected WebApplicationContext context;
+    @Autowired protected UserRepository users;
+    @Autowired protected PasswordEncoder passwordEncoder;
+    @Autowired protected JdbcClient jdbc;
+    @Autowired protected ElasticsearchOfferSearch offerSearch;
+    @Autowired protected RecordingNotificationApi emails;
     protected MockMvc mvc;
-
-    @Autowired
-    protected CorrelationIdFilter correlationIdFilter;
+    @Autowired protected CorrelationIdFilter correlationIdFilter;
 
     @BeforeEach
     protected void resetState() {
-        mvc = MockMvcBuilders.webAppContextSetup(context)
-                .addFilters(correlationIdFilter)
-                .apply(springSecurity())
-                .build();
+        mvc = MockMvcBuilders.webAppContextSetup(context).addFilters(correlationIdFilter)
+                .apply(springSecurity()).build();
+        jdbc.sql("DELETE FROM reservation.reservations").update();
         jdbc.sql("DELETE FROM offer.idempotency_keys").update();
         jdbc.sql("DELETE FROM offer.offers").update();
         jdbc.sql("DELETE FROM merchant.merchants").update();
-        jdbc.sql("DELETE FROM identity.users").update(); // tokens and roles go with it (ON DELETE CASCADE)
+        jdbc.sql("DELETE FROM identity.users").update();
         jdbc.sql("TRUNCATE admin.audit_log").update();
         offerSearch.clear();
         emails.clear();
     }
 
-    // ---------- users and tokens ----------
-
     protected User createUser(String email, boolean emailVerified, Role... extraRoles) {
         User user = User.register(email, passwordEncoder.encode(PASSWORD), "Test User", null, Instant.now());
         users.insert(user);
-        if (emailVerified) {
-            users.markEmailVerified(user.id(), Instant.now());
-        }
-        for (Role role : extraRoles) {
-            users.addRole(user.id(), role);
-        }
+        if (emailVerified) users.markEmailVerified(user.id(), Instant.now());
+        for (Role role : extraRoles) users.addRole(user.id(), role);
         return users.findById(user.id()).orElseThrow();
     }
 
     protected String tokenFor(User user) throws Exception {
-        MockHttpServletResponse response = doPost("/api/v1/auth/login",
-                "{\"email\":\"%s\",\"password\":\"%s\"}".formatted(user.email(), PASSWORD), null);
+        String body = """
+                {"email":"%s","password":"%s"}
+                """.formatted(user.email(), PASSWORD);
+        MockHttpServletResponse response = doPost("/api/v1/auth/login", body, null);
         return field(response, "accessToken");
     }
 
     protected String tokenForEmail(String email) throws Exception {
         return tokenFor(users.findByEmail(email).orElseThrow());
     }
-
-    // ---------- requests ----------
 
     protected MockHttpServletResponse doPost(String path, String json, String token) throws Exception {
         return send(post(path).contentType(MediaType.APPLICATION_JSON).content(json), token);
@@ -121,22 +93,17 @@ public abstract class AbstractApiIntegrationTest {
     }
 
     private MockHttpServletResponse send(MockHttpServletRequestBuilder request, String token) throws Exception {
-        if (token != null) {
-            request.header("Authorization", "Bearer " + token);
-        }
+        if (token != null) request.header("Authorization", "Bearer " + token);
         return mvc.perform(request).andReturn().getResponse();
     }
 
-    // ---------- data ----------
-
     protected static String profileJson(String name) {
         return """
-                {"name":"%s","businessType":"BAKERY","address":"12 rue des Fleurs","city":"Casablanca",\
-                "phone":"+212600000000","openingHours":"Lun-Sam 7h-20h"}
+                {"name":"%s","businessType":"BAKERY","address":"12 rue des Fleurs","city":"Casablanca",
+                 "phone":"+212600000000","openingHours":"Lun-Sam 7h-20h"}
                 """.formatted(name);
     }
 
-    /** Creates a verified customer, applies as a merchant and returns the merchant id. */
     protected String applyAs(String email, String merchantName) throws Exception {
         User owner = createUser(email, true);
         MockHttpServletResponse response = doPost("/api/v1/merchants/apply", profileJson(merchantName), tokenFor(owner));
@@ -151,7 +118,7 @@ public abstract class AbstractApiIntegrationTest {
 
     protected static String field(MockHttpServletResponse response, String name) throws Exception {
         String body = response.getContentAsString();
-        Matcher matcher = Pattern.compile("\"" + name + "\"\\s*:\\s*\"([^\"]*)\"").matcher(body);
+        Matcher matcher = Pattern.compile("\"" + Pattern.quote(name) + "\"\\s*:\\s*\"([^\"]*)\"").matcher(body);
         assertThat(matcher.find()).as("field '%s' in response: %s", name, body).isTrue();
         return matcher.group(1);
     }

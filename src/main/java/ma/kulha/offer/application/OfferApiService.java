@@ -1,11 +1,12 @@
 package ma.kulha.offer.application;
-
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import ma.kulha.merchant.application.MerchantApi;
+import ma.kulha.merchant.application.MerchantPublicProfile;
 import ma.kulha.offer.domain.event.OfferEventEnvelope;
 import ma.kulha.offer.domain.repository.OfferRepository;
 import org.slf4j.MDC;
@@ -14,7 +15,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-
 @Service
 class OfferApiService implements OfferApi {
     private final OfferRepository offers;
@@ -22,40 +22,37 @@ class OfferApiService implements OfferApi {
     private final long reservationCutoffMinutes;
     private final Clock clock;
     private final ApplicationEventPublisher events;
-
     OfferApiService(OfferRepository offers, MerchantApi merchants,
-                    @Value("${app.offer.reservation-cutoff-minutes:30}") long reservationCutoffMinutes,
-                    Clock clock, ApplicationEventPublisher events) {
-        this.offers = offers;
-        this.merchants = merchants;
-        this.clock = clock;
-        this.events = events;
+            @Value("${app.offer.reservation-cutoff-minutes:30}") long reservationCutoffMinutes,
+            Clock clock, ApplicationEventPublisher events) {
+        this.offers = offers; this.merchants = merchants; this.clock = clock; this.events = events;
         if (reservationCutoffMinutes < 0) throw new IllegalArgumentException("app.offer.reservation-cutoff-minutes cannot be negative");
         this.reservationCutoffMinutes = reservationCutoffMinutes;
     }
-
     @Override public boolean tryHoldUnits(UUID offerId, int units) {
         boolean held = offers.tryHoldUnits(offerId, units);
         if (held) publishSearchRefresh(offerId);
         return held;
     }
-
     @Override public void releaseUnits(UUID offerId, int units) {
         if (units < 1) throw new IllegalArgumentException("units must be positive");
         if (!offers.releaseUnits(offerId, units)) throw new IllegalStateException("Cannot release more units than are reserved.");
         publishSearchRefresh(offerId);
     }
-
     @Override public boolean isReservable(UUID offerId, Instant now) {
         return offers.findById(offerId).filter(o -> o.isReservable(now, reservationCutoffMinutes))
                 .filter(o -> merchants.isApproved(o.merchantId())).isPresent();
     }
-
     @Override public Optional<OfferSnapshot> snapshot(UUID offerId) {
-        return offers.findById(offerId).map(o -> new OfferSnapshot(o.id(), o.merchantId(), o.priceMinor(),
-                o.pickupStart(), o.pickupEnd(), o.status(), o.availableUnits()));
+        return offers.findById(offerId).flatMap(offer ->
+                merchants.findApprovedPublicProfiles(List.of(offer.merchantId())).stream().findFirst()
+                .map((MerchantPublicProfile merchant) -> new OfferSnapshot(
+                        offer.id(), offer.merchantId(), offer.priceMinor(), offer.originalPriceMinor(),
+                        offer.pickupStart(), offer.pickupEnd(), offer.status() == ma.kulha.offer.domain.model.OfferStatus.PUBLISHED,
+                        offer.availableUnits(),
+                        offer.title(), offer.category().name(), merchant.name(), merchant.address(),
+                        merchant.city(), merchant.pickupInstructions())));
     }
-
     private void publishSearchRefresh(UUID offerId) {
         OfferEventEnvelope event = new OfferEventEnvelope(UUID.randomUUID(), "OfferChanged", 1, clock.instant(),
                 offerId, MDC.get("correlationId"), Map.of("offerId", offerId));
@@ -63,8 +60,6 @@ class OfferApiService implements OfferApi {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override public void afterCommit() { events.publishEvent(event); }
             });
-        } else {
-            events.publishEvent(event);
-        }
+        } else events.publishEvent(event);
     }
 }
