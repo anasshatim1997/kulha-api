@@ -124,7 +124,7 @@ public class ReservationService {
     public ReservationResponse get(String reference, UUID userId, boolean admin, boolean merchantStaff, Locale locale) {
         Instant now = clock.instant();
         Reservation reservation = reservations.findByReferenceForUpdate(reference).orElseThrow(ReservationNotFoundException::new);
-        expireIfPast(reservation, now);
+        reservation = expireIfPast(reservation, now);
         boolean owner = reservation.customerId().equals(userId);
         boolean authorizedMerchant = merchantStaff && merchants.resolveActingMerchant(userId)
                 .filter(reservation.merchantId()::equals).isPresent();
@@ -151,7 +151,11 @@ public class ReservationService {
 
     @Transactional
     public ReservationResponse collect(CollectReservationRequest request, UUID merchantStaffId, Locale locale) {
-        request.validateCredential();
+        try {
+            request.validateCredential();
+        } catch (IllegalArgumentException exception) {
+            throw new InvalidReservationRequestException(exception.getMessage());
+        }
         UUID actingMerchant = merchants.resolveActingMerchant(merchantStaffId).orElseThrow(ReservationNotFoundException::new);
         Instant now = clock.instant();
         Reservation reservation;
@@ -199,7 +203,12 @@ public class ReservationService {
                 .orElseThrow(ReservationNotFoundException::new);
         if (!reservation.customerId().equals(customerId)) throw new ReservationNotFoundException();
         Reservation cancelled = reservation.cancel(now);
-        CancellationReasonCode reasonCode = CancellationReasonCode.parse(reason);
+        CancellationReasonCode reasonCode;
+        try {
+            reasonCode = CancellationReasonCode.parse(reason);
+        } catch (IllegalArgumentException exception) {
+            throw new InvalidReservationRequestException(exception.getMessage());
+        }
         String cleanComment = comment == null || comment.isBlank() ? null : comment.trim();
         if (cleanComment != null && cleanComment.length() > 500) {
             throw new InvalidReservationRequestException("Cancellation comment cannot exceed 500 characters.");
@@ -212,12 +221,16 @@ public class ReservationService {
         return ReservationResponse.from(cancelled, locale, now);
     }
 
-    private void expireIfPast(Reservation reservation, Instant now) {
+    private Reservation expireIfPast(Reservation reservation, Instant now) {
         if ((reservation.status() == ReservationStatus.PENDING || reservation.status() == ReservationStatus.CONFIRMED)
                 && !reservation.pickupEnd().isAfter(now)) {
             Reservation expired = reservation.expire(now);
-            reservations.updateStatus(expired, reservation.status());
+            if (!reservations.updateStatus(expired, reservation.status())) {
+                throw new ReservationConflictException("The reservation changed. Refresh the reservation.");
+            }
+            return expired;
         }
+        return reservation;
     }
 
     private static ReservationAvailabilityResponse unavailable(UUID offerId, int quantity) {
