@@ -70,7 +70,7 @@ END,
         WHEN o.quantity_reserved > 0 THEN COALESCE(o.reservation_started_at, CURRENT_TIMESTAMP)
         ELSE o.reservation_started_at
     END,
-    quantity_reserved = LEAST(o.quantity_reserved, GREATEST(o.quantity_total - 1, 0)),
+    quantity_total = GREATEST(o.quantity_total, o.quantity_reserved + 1),
     version = o.version + 1,
     updated_at = CURRENT_TIMESTAMP
 FROM numbered n
