@@ -24,6 +24,7 @@ final class CanonicalOfferRequestHash {
         fields.put("category", request.category().name());
         fields.put("description", normalize(request.description()));
         fields.put("foodNotes", nullable(request.foodNotes()));
+        fields.put("imageUrl", nullable(request.imageUrl()));
         fields.put("originalPriceMinor", request.originalPriceMinor() == null ? "" : request.originalPriceMinor().toString());
         fields.put("pickupEnd", instant(request.pickupEnd()));
         fields.put("pickupStart", instant(request.pickupStart()));
