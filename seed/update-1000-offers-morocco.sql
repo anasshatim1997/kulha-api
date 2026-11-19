@@ -70,14 +70,17 @@ END,
         WHEN o.quantity_reserved > 0 THEN COALESCE(o.reservation_started_at, CURRENT_TIMESTAMP)
         ELSE o.reservation_started_at
     END,
+    quantity_reserved = LEAST(o.quantity_reserved, GREATEST(o.quantity_total - 1, 0)),
     version = o.version + 1,
     updated_at = CURRENT_TIMESTAMP
 FROM numbered n
 WHERE o.id = n.id;
 
 -- Replace merchant locations only for merchants linked to these 1,000 test offers.
--- Coordinates intentionally represent the relevant Moroccan city centre, not a made-up
--- street-level GPS pin. The address itself is a Moroccan sample address for UI/map testing.
+-- The addresses and coordinates are synthetic UI-test data. Each merchant gets a
+-- deterministic, distinct point within roughly 0.4–1.2 km of its city centre so store
+-- markers do not all sit on top of one another at the same city-centre coordinate.
+-- These coordinates are not real storefront GPS and must never be used for real merchants.
 WITH locations(location_no, address, city, district, latitude, longitude) AS (
     VALUES
     ( 1, '14 rue du Marché', 'Casablanca', 'Maarif', 33.5899, -7.6039),
@@ -127,7 +130,15 @@ WITH locations(location_no, address, city, district, latitude, longitude) AS (
     JOIN offer.offers o ON o.merchant_id = m.id
     WHERE o.food_notes LIKE 'KULHA_LOADTEST_1000_V1:%'
 ), assigned AS (
-    SELECT mr.id, l.address, l.city, l.district, l.latitude, l.longitude
+    SELECT mr.id,
+           l.address,
+           l.city,
+           l.district,
+           l.latitude + SIN(mr.rn::double precision * 2.399963229728653)
+               * (0.0025 + 0.0085 * SQRT(mr.rn::double precision / 40.0)) AS latitude,
+           l.longitude + COS(mr.rn::double precision * 2.399963229728653)
+               * (0.0025 + 0.0085 * SQRT(mr.rn::double precision / 40.0))
+               / GREATEST(COS(RADIANS(l.latitude)), 0.5) AS longitude
     FROM merchant_rows mr
     JOIN locations l ON l.location_no = 1 + ((mr.rn - 1) % 40)
 )
@@ -147,6 +158,7 @@ DECLARE
     invalid_count integer;
     image_count integer;
     merchant_count integer;
+    distinct_map_points integer;
 BEGIN
     SELECT count(*) INTO invalid_count
     FROM offer.offers o
@@ -165,7 +177,9 @@ BEGIN
     FROM offer.offers
     WHERE food_notes LIKE 'KULHA_LOADTEST_1000_V1:%' AND image_url IS NOT NULL;
 
-    SELECT count(DISTINCT m.id) INTO merchant_count
+    SELECT count(DISTINCT m.id),
+           count(DISTINCT (round(m.latitude::numeric, 6), round(m.longitude::numeric, 6)))
+      INTO merchant_count, distinct_map_points
     FROM merchant.merchants m
     JOIN offer.offers o ON o.merchant_id = m.id
     WHERE o.food_notes LIKE 'KULHA_LOADTEST_1000_V1:%'
@@ -175,9 +189,10 @@ BEGIN
       AND m.latitude IS NOT NULL
       AND m.longitude IS NOT NULL;
 
-    IF invalid_count <> 0 OR image_count <> 1000 OR merchant_count = 0 THEN
-        RAISE EXCEPTION 'Test data validation failed: invalid offers %, images %, Moroccan merchants %.',
-            invalid_count, image_count, merchant_count;
+    IF invalid_count <> 0 OR image_count <> 1000 OR merchant_count = 0
+       OR distinct_map_points <> merchant_count THEN
+        RAISE EXCEPTION 'Test data validation failed: invalid offers %, images %, Moroccan merchants %, distinct map points %.',
+            invalid_count, image_count, merchant_count, distinct_map_points;
     END IF;
 END $$;
 
