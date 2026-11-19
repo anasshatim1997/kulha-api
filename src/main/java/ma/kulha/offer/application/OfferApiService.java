@@ -48,7 +48,8 @@ class OfferApiService implements OfferApi {
                 merchants.findApprovedPublicProfiles(List.of(offer.merchantId())).stream().findFirst()
                 .map((MerchantPublicProfile merchant) -> new OfferSnapshot(
                         offer.id(), offer.merchantId(), offer.priceMinor(), offer.originalPriceMinor(),
-                        offer.pickupStart(), offer.pickupEnd(), offer.status(), offer.availableUnits(),
+                        offer.pickupStart(), offer.pickupEnd(), offer.status() == ma.kulha.offer.domain.model.OfferStatus.PUBLISHED,
+                        offer.availableUnits(),
                         offer.title(), offer.category().name(), merchant.name(), merchant.address(),
                         merchant.city(), merchant.pickupInstructions())));
     }

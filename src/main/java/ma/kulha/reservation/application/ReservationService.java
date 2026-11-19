@@ -8,7 +8,6 @@ import java.util.UUID;
 import ma.kulha.merchant.application.MerchantApi;
 import ma.kulha.offer.application.OfferApi;
 import ma.kulha.offer.application.OfferSnapshot;
-import ma.kulha.offer.domain.model.OfferStatus;
 import ma.kulha.reservation.domain.model.Reservation;
 import ma.kulha.reservation.domain.model.ReservationFilter;
 import ma.kulha.reservation.domain.model.ReservationStatus;
@@ -48,7 +47,7 @@ public class ReservationService {
             throw new InvalidReservationRequestException("The requested date window cannot exceed 31 days.");
         OfferSnapshot offer = offers.snapshot(offerId).orElse(null);
         if (offer == null || offer.pickupStart() == null || offer.pickupEnd() == null
-                || offer.status() != OfferStatus.PUBLISHED || (merchantId != null && !merchantId.equals(offer.merchantId())))
+                || !offer.published() || (merchantId != null && !merchantId.equals(offer.merchantId())))
             return unavailable(offerId, quantity);
         Instant now = clock.instant();
         boolean intersects = (from == null || offer.pickupEnd().isAfter(from))
@@ -73,7 +72,7 @@ public class ReservationService {
         Instant now = clock.instant();
         OfferSnapshot before = offers.snapshot(request.offerId())
                 .orElseThrow(() -> new ReservationUnavailableException("This basket is no longer available."));
-        if (before.status() != OfferStatus.PUBLISHED || before.pickupStart() == null || before.pickupEnd() == null
+        if (!before.published() || before.pickupStart() == null || before.pickupEnd() == null
                 || !before.pickupStart().isAfter(now) || !offers.isReservable(request.offerId(), now))
             throw new ReservationUnavailableException("This pickup window is no longer available.");
         if (!before.pickupStart().equals(request.pickupStart()) || !before.pickupEnd().equals(request.pickupEnd()))

@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import ma.kulha.identity.domain.model.User;
 import ma.kulha.support.AbstractApiIntegrationTest;
@@ -126,6 +127,9 @@ class ReservationIntegrationTest extends AbstractApiIntegrationTest {
     }
 
     private Fixture fixture(int quantity, Instant pickupStart, Instant pickupEnd) {
+        // PostgreSQL timestamptz persists microseconds. Use the same precision as API-returned slots.
+        pickupStart = pickupStart.truncatedTo(ChronoUnit.MICROS);
+        pickupEnd = pickupEnd.truncatedTo(ChronoUnit.MICROS);
         User owner = createUser("shop-owner-" + UUID.randomUUID() + "@example.test", true);
         UUID merchantId = UUID.randomUUID();
         UUID offerId = UUID.randomUUID();
