@@ -61,8 +61,8 @@ public record Reservation(UUID id, String reference, UUID customerId, UUID offer
         return (status == ReservationStatus.PENDING || status == ReservationStatus.CONFIRMED) && now.isBefore(pickupStart);
     }
     public ReservationGroup group(Instant now) {
-        if (status == ReservationStatus.CANCELLED) return ReservationGroup.CANCELLED;
-        if (status == ReservationStatus.COMPLETED || status == ReservationStatus.EXPIRED || !pickupEnd.isAfter(now))
+        if (status == ReservationStatus.CANCELLED || status == ReservationStatus.EXPIRED) return ReservationGroup.CANCELLED;
+        if (status == ReservationStatus.COMPLETED || !pickupEnd.isAfter(now))
             return ReservationGroup.PAST;
         return ReservationGroup.UPCOMING;
     }

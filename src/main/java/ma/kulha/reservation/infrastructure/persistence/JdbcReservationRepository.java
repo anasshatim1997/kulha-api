@@ -88,8 +88,8 @@ class JdbcReservationRepository implements ReservationRepository {
     private static String filterSql(ReservationFilter filter) {
         return switch (filter) {
             case UPCOMING -> "status IN ('PENDING','CONFIRMED') AND pickup_end > :now";
-            case PAST -> "(status IN ('COMPLETED','EXPIRED') OR (status IN ('PENDING','CONFIRMED') AND pickup_end <= :now))";
-            case CANCELLED -> "status = 'CANCELLED'";
+            case PAST -> "(status = 'COMPLETED' OR (status IN ('PENDING','CONFIRMED') AND pickup_end <= :now))";
+            case CANCELLED -> "status IN ('CANCELLED','EXPIRED')";
             case ALL -> "TRUE";
         };
     }

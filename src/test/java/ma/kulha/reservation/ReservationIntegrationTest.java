@@ -77,17 +77,29 @@ class ReservationIntegrationTest extends AbstractApiIntegrationTest {
         jdbc.sql("UPDATE reservation.reservations SET status='EXPIRED' WHERE reference=:ref")
                 .param("ref", reference).update();
 
+        Fixture completedFixture = fixture(5, Instant.now().plusSeconds(7200), Instant.now().plusSeconds(10800));
+        MockHttpServletResponse completed = create(token, completedFixture, 1);
+        String completedReference = field(completed, "reference");
+        jdbc.sql("UPDATE reservation.reservations SET status='COMPLETED' WHERE reference=:ref")
+                .param("ref", completedReference).update();
+
         Fixture upcoming = fixture(5, Instant.now().plusSeconds(10800), Instant.now().plusSeconds(14400));
         MockHttpServletResponse second = create(token, upcoming, 1);
         assertThat(second.getStatus()).isEqualTo(201);
 
         MockHttpServletResponse upcomingList = doGet("/api/v1/reservations?status=upcoming", token);
         MockHttpServletResponse pastList = doGet("/api/v1/reservations?status=past", token);
+        MockHttpServletResponse cancelledList = doGet("/api/v1/reservations?status=cancelled", token);
 
         assertThat(upcomingList.getStatus()).isEqualTo(200);
-        assertThat(upcomingList.getContentAsString()).contains(field(second, "reference")).doesNotContain(reference);
+        assertThat(upcomingList.getContentAsString()).contains(field(second, "reference"))
+                .doesNotContain(reference).doesNotContain(completedReference);
         assertThat(pastList.getStatus()).isEqualTo(200);
-        assertThat(pastList.getContentAsString()).contains(reference).doesNotContain(field(second, "reference"));
+        assertThat(pastList.getContentAsString()).contains(completedReference)
+                .doesNotContain(reference).doesNotContain(field(second, "reference"));
+        assertThat(cancelledList.getStatus()).isEqualTo(200);
+        assertThat(cancelledList.getContentAsString()).contains(reference)
+                .doesNotContain(completedReference).doesNotContain(field(second, "reference"));
     }
 
     @Test
