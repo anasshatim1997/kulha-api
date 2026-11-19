@@ -1,6 +1,6 @@
 -- KULHA test data refresh: exactly the 1,000 offers created by seed-1000-offers.sql.
 -- Run this entire file directly in PostgreSQL after Flyway V15__offer_images.sql has been applied.
--- Pickup windows remain within the backend's existing 7-day / 24-hour publication rules.
+-- Pickup windows remain within the backend's existing 60-day / 24-hour publication rules.
 BEGIN;
 
 -- Keep this script independently runnable in PostgreSQL; Flyway V15 uses IF NOT EXISTS too.
@@ -61,9 +61,9 @@ SET image_url = CASE n.category
     ELSE 'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=1200&q=85'
 END,
     pickup_start = CURRENT_TIMESTAMP + INTERVAL '2 hours'
-                   + (((n.rn - 1) % 5) * INTERVAL '1 day'),
+                   + (((n.rn - 1) % 60) * INTERVAL '1 day'),
     pickup_end = CURRENT_TIMESTAMP + INTERVAL '5 hours'
-                 + (((n.rn - 1) % 5) * INTERVAL '1 day'),
+                 + (((n.rn - 1) % 60) * INTERVAL '1 day'),
     status = 'PUBLISHED',
     published_at = COALESCE(o.published_at, CURRENT_TIMESTAMP),
     reservation_started_at = CASE
@@ -157,7 +157,7 @@ BEGIN
           OR o.image_url NOT LIKE 'https://images.unsplash.com/%'
           OR o.pickup_start <= CURRENT_TIMESTAMP
           OR o.pickup_end <= o.pickup_start
-          OR o.pickup_end > CURRENT_TIMESTAMP + INTERVAL '7 days'
+          OR o.pickup_end > CURRENT_TIMESTAMP + INTERVAL '60 days'
           OR o.pickup_end - o.pickup_start > INTERVAL '24 hours'
       );
 
@@ -191,7 +191,7 @@ SELECT o.status,
        min(o.pickup_start) AS first_pickup,
        max(o.pickup_end) AS last_pickup,
        count(*) FILTER (WHERE o.pickup_end > CURRENT_TIMESTAMP
-                         AND o.pickup_end <= CURRENT_TIMESTAMP + INTERVAL '7 days') AS valid_pickup_windows
+                         AND o.pickup_end <= CURRENT_TIMESTAMP + INTERVAL '60 days') AS valid_pickup_windows
 FROM offer.offers o
 WHERE o.food_notes LIKE 'KULHA_LOADTEST_1000_V1:%'
 GROUP BY o.status;
