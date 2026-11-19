@@ -46,7 +46,7 @@ class JdbcOfferRepository implements OfferRepository {
         jdbc.sql("""
                 INSERT INTO offer.offers (id, merchant_id, title, description, category, price_minor,
                     original_price_minor, quantity_total, quantity_reserved, reservation_started_at, pickup_start, pickup_end,
-                    allergens_status, allergens, food_notes, status, published_at, version, created_at, updated_at)
+                    allergens_status, allergens, food_notes, status, published_at, version, created_at, updated_at, image_url)
                 VALUES (:id, :merchant, :title, :description, :category, :price, :originalPrice,
                     :total, :reserved, :reservationStartedAt, :pickupStart, :pickupEnd, :allergensStatus, CAST(:allergens AS varchar[]),
                     :foodNotes, :status, :publishedAt, :version, :createdAt, :updatedAt, :imageUrl)
@@ -202,7 +202,7 @@ class JdbcOfferRepository implements OfferRepository {
                 )
                 SELECT id, merchant_id, title, description, category, price_minor, original_price_minor,
                        quantity_total, quantity_reserved, reservation_started_at, pickup_start, pickup_end, allergens_status,
-                       allergens, food_notes, status, published_at, version, created_at, updated_at
+                       allergens, food_notes, status, published_at, version, created_at, updated_at, image_url
                 FROM updated ORDER BY pickup_end, id
                 """).param("now", toDb(now), Types.TIMESTAMP_WITH_TIMEZONE).param("limit", limit)
                 .query(JdbcOfferRepository::mapOffer).list();
