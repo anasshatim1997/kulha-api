@@ -3,6 +3,9 @@
 -- Pickup windows remain within the backend's existing 7-day / 24-hour publication rules.
 BEGIN;
 
+-- Keep this script independently runnable in PostgreSQL; Flyway V15 uses IF NOT EXISTS too.
+ALTER TABLE offer.offers ADD COLUMN IF NOT EXISTS image_url varchar(2048);
+
 DO $$
 DECLARE
     tagged_count integer;
