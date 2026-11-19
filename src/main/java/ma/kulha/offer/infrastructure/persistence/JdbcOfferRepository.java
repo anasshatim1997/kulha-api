@@ -108,7 +108,7 @@ class JdbcOfferRepository implements OfferRepository {
         String filter = status == null ? "" : " AND status = :status";
         JdbcClient.StatementSpec query = jdbc.sql("""
                 SELECT id, title, category, price_minor, quantity_total, quantity_reserved,
-                       pickup_start, pickup_end, status, created_at, version
+                       pickup_start, pickup_end, status, created_at, version, image_url
                 FROM offer.offers WHERE merchant_id = :merchant
                 """ + filter + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset")
                 .param("merchant", merchantId).param("limit", limit).param("offset", offset);
@@ -118,7 +118,7 @@ class JdbcOfferRepository implements OfferRepository {
                 rs.getInt("price_minor"), rs.getInt("quantity_total"), rs.getInt("quantity_reserved"),
                 toInstant(rs.getObject("pickup_start", OffsetDateTime.class)),
                 toInstant(rs.getObject("pickup_end", OffsetDateTime.class)), OfferStatus.valueOf(rs.getString("status")),
-                toInstant(rs.getObject("created_at", OffsetDateTime.class)), rs.getLong("version"))).list();
+                toInstant(rs.getObject("created_at", OffsetDateTime.class)), rs.getLong("version"), rs.getString("image_url"))).list();
     }
 
     @Override
