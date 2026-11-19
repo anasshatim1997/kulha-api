@@ -159,10 +159,10 @@ class ReservationIntegrationTest extends AbstractApiIntegrationTest {
                 """).param("reference", reference).query(String.class).single()).hasSize(64);
 
         String merchantToken = tokenFor(merchantOwner);
-        String collectBody = "{\\"token\\":\\"" + qrPayload + "\\"}";
+        String collectBody = "{\"token\":\"" + qrPayload + "\"}";
         MockHttpServletResponse collected = doPost("/api/v1/reservations/collect", collectBody, merchantToken);
         assertThat(collected.getStatus()).isEqualTo(200);
-        assertThat(collected.getContentAsString()).contains("\\"status\\":\\"COMPLETED\\"");
+        assertThat(collected.getContentAsString()).contains("\"status\":\"COMPLETED\"");
 
         MockHttpServletResponse reused = doPost("/api/v1/reservations/collect", collectBody, merchantToken);
         assertThat(reused.getStatus()).isEqualTo(404);
