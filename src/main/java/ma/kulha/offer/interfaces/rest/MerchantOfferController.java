@@ -38,7 +38,7 @@ public class MerchantOfferController {
         validateIdempotencyKey(key);
         var offer = offers.create(userId(jwt), body.title(), body.description(), body.category(), body.priceMinor(),
                 body.originalPriceMinor(), body.quantityTotal(), body.pickupStart(), body.pickupEnd(),
-                body.allergensStatus(), body.allergens(), body.foodNotes(), key, key == null ? null : CanonicalOfferRequestHash.create(body));
+                body.allergensStatus(), body.allergens(), body.foodNotes(), body.imageUrl(), key, key == null ? null : CanonicalOfferRequestHash.create(body));
         return ResponseEntity.status(HttpStatus.CREATED).body(OfferResponse.from(offer));
     }
 
@@ -64,7 +64,7 @@ public class MerchantOfferController {
         if (body.version() == null) throw new InvalidOfferDataException("version is required");
         return OfferResponse.from(offers.edit(userId(jwt), id, body.version(), body.title(), body.description(),
                 body.category(), body.priceMinor(), body.originalPriceMinor(), body.quantityTotal(), body.pickupStart(),
-                body.pickupEnd(), body.allergensStatus(), body.allergens(), body.foodNotes()));
+                body.pickupEnd(), body.allergensStatus(), body.allergens(), body.foodNotes(), body.imageUrl()));
     }
 
     @PostMapping("/{id}/publish")
