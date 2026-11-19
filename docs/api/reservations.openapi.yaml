@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: KULHA Reservations API
-  version: 1.0.0
-  description: Customer pickup reservations. Inventory, regular prices and booking totals are authoritative on the server.
+  version: 1.1.0
+  description: Pickup-only customer reservations. Availability and all prices are authoritative on the server.
 servers:
   - url: /api/v1
 paths:
@@ -25,10 +25,9 @@ paths:
           schema: { type: string, format: date-time }
         - in: query
           name: quantity
-          schema: { type: integer, minimum: 1, default: 1, maximum: 500 }
+          schema: { type: integer, minimum: 1, maximum: 500, default: 1 }
       responses:
-        "200":
-          description: Live inventory, exact pickup window, shop location, current and regular prices, and server-computed totals/savings for the selected quantity.
+        "200": { description: Live inventory, pickup window, unit price and server-computed totals. }
   /reservations:
     get:
       security: [{ bearerAuth: [] }]
@@ -43,10 +42,10 @@ paths:
           name: size
           schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
       responses:
-        "200": { description: Customer reservations with server-derived classification. }
+        "200": { description: Customer-owned reservations with server-derived grouping. }
     post:
       security: [{ bearerAuth: [] }]
-      description: Creates and confirms a pickup reservation. Client prices are rejected; the server reads current offer pricing.
+      description: Creates and confirms a pickup reservation. Client-supplied prices are rejected.
       requestBody:
         required: true
         content:
@@ -62,8 +61,7 @@ paths:
                 priceMinor: { type: integer, deprecated: true, description: Rejected; server calculated. }
                 totalPriceMinor: { type: integer, deprecated: true, description: Rejected; server calculated. }
       responses:
-        "201": { description: Confirmed reservation with reference and pickup code. }
-        "409": { description: Inventory or pickup window conflict. }
+        "201": { description: Confirmed reservation with pickup reference and human fallback code. }
   /reservations/{reference}:
     get:
       security: [{ bearerAuth: [] }]
@@ -72,22 +70,60 @@ paths:
           name: reference
           required: true
           schema: { type: string }
-        - in: header
-          name: Accept-Language
-          schema: { type: string, enum: [en, fr, ar] }
       responses:
-        "200": { description: Reservation snapshot for owner or authorized staff. }
+        "200": { description: Reservation snapshot for its owner or authorized staff. }
         "404": { description: Missing or unauthorized reservation. }
-  /reservations/{reference}/cancel:
-    patch:
+  /reservations/{reference}/pickup-credential:
+    post:
       security: [{ bearerAuth: [] }]
+      description: Rotates an opaque single-use QR credential. Only the owning customer may issue it; only its merchant may collect it.
       parameters:
         - in: path
           name: reference
           required: true
           schema: { type: string }
       responses:
-        "200": { description: Cancelled reservation and released inventory. }
+        "200": { description: QR payload, PNG data URL and expiry at pickup-window end. }
+        "409": { description: Reservation is not active or its pickup window has ended. }
+  /reservations/collect:
+    post:
+      security: [{ bearerAuth: [] }]
+      description: Merchant-only, single-use collection. Supply either the QR token or a reservation reference plus the human pickup code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: { type: string, maxLength: 80 }
+                reference: { type: string, maxLength: 40 }
+                pickupCode: { type: string, pattern: '^[A-Za-z0-9]{6}$' }
+      responses:
+        "200": { description: Reservation marked COMPLETED and credential invalidated. }
+        "404": { description: Reservation or merchant ownership mismatch. }
+        "409": { description: Reservation is not collectable in the current pickup window or was already collected. }
+  /reservations/{reference}/cancel:
+    patch:
+      security: [{ bearerAuth: [] }]
+      description: Customer cancellation with optional structured reason and comment. The reason is optional.
+      parameters:
+        - in: path
+          name: reference
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reasonCode:
+                  type: string
+                  enum: [PICKUP_TIME, TOO_FAR, CHANGED_MIND, FOUND_ALTERNATIVE, OFFER_NOT_AS_EXPECTED, RESERVED_BY_MISTAKE, OTHER]
+                comment: { type: string, maxLength: 500 }
+      responses:
+        "200": { description: Cancelled reservation, released inventory, and an append-only cancellation event. }
         "409": { description: Reservation is no longer cancellable. }
 components:
   securitySchemes:

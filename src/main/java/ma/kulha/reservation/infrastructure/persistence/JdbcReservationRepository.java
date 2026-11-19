@@ -58,14 +58,51 @@ class JdbcReservationRepository implements ReservationRepository {
         return jdbc.sql(SELECT + " WHERE reference = :reference FOR UPDATE").param("reference", reference)
                 .query(JdbcReservationRepository::map).optional();
     }
+    @Override public Optional<Reservation> findByPickupCredentialHashForUpdate(String hash) {
+        return jdbc.sql(SELECT + " WHERE pickup_credential_hash = :hash FOR UPDATE")
+                .param("hash", hash).query(JdbcReservationRepository::map).optional();
+    }
+
+    @Override public boolean savePickupCredential(UUID reservationId, String hash, Instant updatedAt) {
+        return jdbc.sql("""
+                UPDATE reservation.reservations
+                   SET pickup_credential_hash = :hash, updated_at = :updatedAt
+                 WHERE id = :id AND status = 'CONFIRMED' AND pickup_end > :updatedAt
+                """)
+                .param("hash", hash).param("updatedAt", toDb(updatedAt), Types.TIMESTAMP_WITH_TIMEZONE)
+                .param("id", reservationId).update() == 1;
+    }
+
     @Override public boolean updateStatus(Reservation r, ReservationStatus expectedStatus) {
         return jdbc.sql("""
-                UPDATE reservation.reservations SET status = :status, updated_at = :updatedAt
-                WHERE id = :id AND status = :expectedStatus
+                UPDATE reservation.reservations
+                   SET status = :status, updated_at = :updatedAt, pickup_credential_hash = NULL
+                 WHERE id = :id AND status = :expectedStatus
                 """)
                 .param("status", r.status().name()).param("updatedAt", toDb(r.updatedAt()), Types.TIMESTAMP_WITH_TIMEZONE)
                 .param("id", r.id()).param("expectedStatus", expectedStatus.name()).update() == 1;
     }
+    @Override public void recordCancellation(Reservation r, String reasonCode, String comment, Instant cancelledAt) {
+        long minutesBeforePickup = Math.max(0, java.time.Duration.between(cancelledAt, r.pickupStart()).toMinutes());
+        jdbc.sql("""
+                INSERT INTO reservation.cancellation_events
+                    (id, reservation_id, customer_id, merchant_id, offer_id, offer_category,
+                     reason_code, comment, actor_type, pickup_start, minutes_before_pickup,
+                     quantity, total_price_minor, cancelled_at)
+                VALUES
+                    (:id, :reservation, :customer, :merchant, :offer, :category,
+                     :reason, :comment, 'CUSTOMER', :pickupStart, :minutesBeforePickup,
+                     :quantity, :totalPrice, :cancelledAt)
+                """)
+                .param("id", UUID.randomUUID()).param("reservation", r.id()).param("customer", r.customerId())
+                .param("merchant", r.merchantId()).param("offer", r.offerId()).param("category", r.offerCategory())
+                .param("reason", reasonCode).param("comment", comment, Types.VARCHAR)
+                .param("pickupStart", toDb(r.pickupStart()), Types.TIMESTAMP_WITH_TIMEZONE)
+                .param("minutesBeforePickup", minutesBeforePickup).param("quantity", r.quantity())
+                .param("totalPrice", r.totalPriceMinor())
+                .param("cancelledAt", toDb(cancelledAt), Types.TIMESTAMP_WITH_TIMEZONE).update();
+    }
+
     @Override public List<Reservation> list(UUID customerId, ReservationFilter filter, Instant now, int limit, int offset) {
         String order = filter == ReservationFilter.UPCOMING
                 ? "pickup_start ASC, created_at ASC" : "pickup_start DESC, created_at DESC";
@@ -81,7 +118,7 @@ class JdbcReservationRepository implements ReservationRepository {
     }
     @Override public int expireActive(Instant now) {
         return jdbc.sql("""
-                UPDATE reservation.reservations SET status = 'EXPIRED', updated_at = :now
+                UPDATE reservation.reservations SET status = 'EXPIRED', updated_at = :now, pickup_credential_hash = NULL
                 WHERE status IN ('PENDING','CONFIRMED') AND pickup_end <= :now
                 """).param("now", toDb(now), Types.TIMESTAMP_WITH_TIMEZONE).update();
     }

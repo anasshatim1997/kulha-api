@@ -2,15 +2,18 @@ package ma.kulha.reservation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+import ma.kulha.identity.domain.model.Role;
 import ma.kulha.identity.domain.model.User;
 import ma.kulha.support.AbstractApiIntegrationTest;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 class ReservationIntegrationTest extends AbstractApiIntegrationTest {
@@ -104,6 +107,71 @@ class ReservationIntegrationTest extends AbstractApiIntegrationTest {
     }
 
     @Test
+    void cancellationCapturesStructuredReasonAndOptionalCommentAtomically() throws Exception {
+        User customer = createUser("reservation-cancel-reason@example.test", true);
+        Fixture fixture = fixture(5, Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200));
+        String token = tokenFor(customer);
+        MockHttpServletResponse created = create(token, fixture, 1);
+        String reference = field(created, "reference");
+
+        MockHttpServletResponse response = mvc.perform(patch("/api/v1/reservations/" + reference + "/cancel")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"reasonCode":"TOO_FAR","comment":"I cannot reach the shop today."}
+                        """)).andReturn().getResponse();
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(jdbc.sql("""
+                SELECT reason_code FROM reservation.cancellation_events
+                 WHERE reservation_id = (SELECT id FROM reservation.reservations WHERE reference=:reference)
+                """).param("reference", reference).query(String.class).single()).isEqualTo("TOO_FAR");
+        assertThat(jdbc.sql("""
+                SELECT comment FROM reservation.cancellation_events
+                 WHERE reservation_id = (SELECT id FROM reservation.reservations WHERE reference=:reference)
+                """).param("reference", reference).query(String.class).single())
+                .isEqualTo("I cannot reach the shop today.");
+    }
+
+    @Test
+    void pickupQrCredentialIsOpaqueSingleUseAndBoundToTheOwningMerchant() throws Exception {
+        User customer = createUser("reservation-qr-customer@example.test", true);
+        User merchantOwner = createUser("reservation-qr-merchant@example.test", true, Role.MERCHANT);
+        Fixture fixture = fixture(5, Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), merchantOwner);
+        String customerToken = tokenFor(customer);
+        MockHttpServletResponse created = create(customerToken, fixture, 1);
+        String reference = field(created, "reference");
+        jdbc.sql("""
+                UPDATE reservation.reservations
+                   SET pickup_start=:start, pickup_end=:end
+                 WHERE reference=:reference
+                """).param("start", db(Instant.now().minusSeconds(60)))
+                .param("end", db(Instant.now().plusSeconds(1800))).param("reference", reference).update();
+
+        MockHttpServletResponse credential = mvc.perform(post("/api/v1/reservations/" + reference + "/pickup-credential")
+                .header("Authorization", "Bearer " + customerToken)).andReturn().getResponse();
+        assertThat(credential.getStatus()).isEqualTo(200);
+        String qrPayload = field(credential, "qrPayload");
+        assertThat(qrPayload).startsWith("KULHA-PICKUP:");
+        assertThat(credential.getContentAsString()).contains("data:image/png;base64,");
+        assertThat(jdbc.sql("""
+                SELECT pickup_credential_hash FROM reservation.reservations WHERE reference=:reference
+                """).param("reference", reference).query(String.class).single()).hasSize(64);
+
+        String merchantToken = tokenFor(merchantOwner);
+        String collectBody = "{\\"token\\":\\"" + qrPayload + "\\"}";
+        MockHttpServletResponse collected = doPost("/api/v1/reservations/collect", collectBody, merchantToken);
+        assertThat(collected.getStatus()).isEqualTo(200);
+        assertThat(collected.getContentAsString()).contains("\\"status\\":\\"COMPLETED\\"");
+
+        MockHttpServletResponse reused = doPost("/api/v1/reservations/collect", collectBody, merchantToken);
+        assertThat(reused.getStatus()).isEqualTo(404);
+        assertThat(jdbc.sql("""
+                SELECT pickup_credential_hash FROM reservation.reservations WHERE reference=:reference
+                """).param("reference", reference).query(String.class).optional()).isEmpty();
+    }
+
+    @Test
     void cancellationBeforePickupReleasesTheHeldQuantity() throws Exception {
         User customer = createUser("reservation-cancel@example.test", true);
         Fixture fixture = fixture(5, Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200));
@@ -127,10 +195,14 @@ class ReservationIntegrationTest extends AbstractApiIntegrationTest {
     }
 
     private Fixture fixture(int quantity, Instant pickupStart, Instant pickupEnd) {
+        User owner = createUser("shop-owner-" + UUID.randomUUID() + "@example.test", true);
+        return fixture(quantity, pickupStart, pickupEnd, owner);
+    }
+
+    private Fixture fixture(int quantity, Instant pickupStart, Instant pickupEnd, User owner) {
         // PostgreSQL timestamptz persists microseconds. Use the same precision as API-returned slots.
         pickupStart = pickupStart.truncatedTo(ChronoUnit.MICROS);
         pickupEnd = pickupEnd.truncatedTo(ChronoUnit.MICROS);
-        User owner = createUser("shop-owner-" + UUID.randomUUID() + "@example.test", true);
         UUID merchantId = UUID.randomUUID();
         UUID offerId = UUID.randomUUID();
         Instant now = Instant.now();
@@ -151,10 +223,10 @@ class ReservationIntegrationTest extends AbstractApiIntegrationTest {
                         'UNKNOWN', '{}', NULL, 'PUBLISHED', :now, 0, :now, :now)
                 """).param("id", offerId).param("merchant", merchantId).param("quantity", quantity)
                 .param("pickupStart", db(pickupStart)).param("pickupEnd", db(pickupEnd)).param("now", db(now)).update();
-        return new Fixture(offerId, pickupStart, pickupEnd);
+        return new Fixture(offerId, merchantId, pickupStart, pickupEnd);
     }
 
     private static OffsetDateTime db(Instant value) { return value.atOffset(ZoneOffset.UTC); }
 
-    private record Fixture(UUID offerId, Instant pickupStart, Instant pickupEnd) { }
+    private record Fixture(UUID offerId, UUID merchantId, Instant pickupStart, Instant pickupEnd) { }
 }

@@ -1,10 +1,15 @@
 package ma.kulha.reservation.interfaces.rest;
+
 import java.time.Instant;
 import java.util.Locale;
 import java.util.UUID;
 import jakarta.validation.Valid;
+import ma.kulha.reservation.application.PickupCredential;
 import ma.kulha.reservation.application.ReservationService;
+import ma.kulha.reservation.interfaces.dto.CancelReservationRequest;
+import ma.kulha.reservation.interfaces.dto.CollectReservationRequest;
 import ma.kulha.reservation.interfaces.dto.CreateReservationRequest;
+import ma.kulha.reservation.interfaces.dto.PickupCredentialResponse;
 import ma.kulha.reservation.interfaces.dto.ReservationAvailabilityResponse;
 import ma.kulha.reservation.interfaces.dto.ReservationResponse;
 import ma.kulha.shared.web.PageResponse;
@@ -21,42 +26,75 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
 @RestController
 @RequestMapping("/api/v1/reservations")
 public class ReservationController {
     private final ReservationService reservations;
-    ReservationController(ReservationService reservations) { this.reservations = reservations; }
+    private final PickupQrCodeEncoder qrCodes;
+
+    ReservationController(ReservationService reservations, PickupQrCodeEncoder qrCodes) {
+        this.reservations = reservations;
+        this.qrCodes = qrCodes;
+    }
+
     @GetMapping("/availability")
     ReservationAvailabilityResponse availability(@RequestParam UUID offerId,
             @RequestParam(required = false) UUID merchantId, @RequestParam(required = false) Instant from,
             @RequestParam(required = false) Instant to, @RequestParam(defaultValue = "1") int quantity) {
         return reservations.availability(offerId, merchantId, from, to, quantity);
     }
+
     @PostMapping
     ResponseEntity<ReservationResponse> create(@Valid @RequestBody CreateReservationRequest request,
             Authentication authentication) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(reservations.create(userId(authentication), request, locale()));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(reservations.create(userId(authentication), request, locale()));
     }
+
     @GetMapping
     PageResponse<ReservationResponse> list(@RequestParam(defaultValue = "upcoming") String status,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int size,
             Authentication authentication) {
         return reservations.list(userId(authentication), status, page, size, locale());
     }
+
     @GetMapping("/{reference}")
     ReservationResponse get(@PathVariable String reference, Authentication authentication) {
         return reservations.get(reference, userId(authentication), hasRole(authentication, "ADMIN"),
                 hasRole(authentication, "MERCHANT"), locale());
     }
-    @PatchMapping("/{reference}/cancel")
-    ReservationResponse cancel(@PathVariable String reference, Authentication authentication) {
-        return reservations.cancel(reference, userId(authentication), locale());
+
+    @PostMapping("/{reference}/pickup-credential")
+    PickupCredentialResponse pickupCredential(@PathVariable String reference, Authentication authentication) {
+        PickupCredential credential = reservations.issuePickupCredential(reference, userId(authentication));
+        String payload = "KULHA-PICKUP:" + credential.token();
+        return new PickupCredentialResponse(payload, qrCodes.toPngDataUrl(payload), credential.expiresAt());
     }
-    private static UUID userId(Authentication authentication) { return UUID.fromString(authentication.getName()); }
+
+    @PostMapping("/collect")
+    ReservationResponse collect(@Valid @RequestBody CollectReservationRequest request, Authentication authentication) {
+        return reservations.collect(request, userId(authentication), locale());
+    }
+
+    @PatchMapping("/{reference}/cancel")
+    ReservationResponse cancel(@PathVariable String reference,
+            @Valid @RequestBody(required = false) CancelReservationRequest request,
+            Authentication authentication) {
+        return reservations.cancel(reference, userId(authentication),
+                request == null ? null : request.reasonCode(),
+                request == null ? null : request.comment(), locale());
+    }
+
+    private static UUID userId(Authentication authentication) {
+        return UUID.fromString(authentication.getName());
+    }
+
     private static boolean hasRole(Authentication authentication, String role) {
         return authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority)
                 .anyMatch(("ROLE_" + role)::equals);
     }
+
     private static Locale locale() {
         Locale locale = LocaleContextHolder.getLocale();
         String language = locale == null ? "fr" : locale.getLanguage();
