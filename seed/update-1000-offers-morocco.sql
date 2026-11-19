@@ -48,8 +48,7 @@ SET image_url = CASE n.category
     ])[1 + ((n.rn - 1) % 3)]
     WHEN 'DRINKS' THEN (ARRAY[
         'https://images.unsplash.com/photo-1544145945-f90425340c7e?auto=format&fit=crop&w=1200&q=85',
-        'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=1200&q=85',
-        'https://images.unsplash.com/photo-1513558161293-c를?auto=format&fit=crop&w=1200&q=85'
+        'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=1200&q=85'
     ])[1 + ((n.rn - 1) % 2)]
     WHEN 'SURPRISE_BASKET' THEN (ARRAY[
         'https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=1200&q=85',
