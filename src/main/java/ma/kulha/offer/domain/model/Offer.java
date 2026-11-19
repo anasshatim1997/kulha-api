@@ -26,7 +26,8 @@ public record Offer(
         Instant publishedAt,
         long version,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        String imageUrl) {
 
     public Offer {
         Objects.requireNonNull(id, "id");
@@ -43,6 +44,7 @@ public record Offer(
         if (originalPriceMinor != null && originalPriceMinor < priceMinor) throw new InvalidOfferDataException("originalPriceMinor must be at least priceMinor");
         if (quantityTotal < 1 || quantityTotal > 500) throw new InvalidOfferDataException("quantityTotal must be 1..500");
         if (quantityReserved < 0 || quantityReserved > quantityTotal) throw new InvalidOfferDataException("quantityReserved must be within quantityTotal");
+        imageUrl = validateImageUrl(imageUrl);
         if (quantityReserved > 0 && reservationStartedAt == null) throw new InvalidOfferDataException("reservationStartedAt is required when units are reserved");
         if (allergensStatus == AllergensStatus.UNKNOWN && !allergens.isEmpty()) throw new InvalidOfferDataException("UNKNOWN allergens must be empty");
         for (String allergen : allergens) {
@@ -52,6 +54,16 @@ public record Offer(
         }
         if ((pickupStart == null) != (pickupEnd == null)) throw new InvalidOfferDataException("Pickup start and end must both be set or both be absent");
         if (pickupStart != null && !pickupEnd.isAfter(pickupStart)) throw new InvalidOfferDataException("pickupEnd must be after pickupStart");
+    }
+
+    public Offer(UUID id, UUID merchantId, String title, String description, OfferCategory category,
+                 int priceMinor, Integer originalPriceMinor, int quantityTotal, int quantityReserved,
+                 Instant reservationStartedAt, Instant pickupStart, Instant pickupEnd,
+                 AllergensStatus allergensStatus, List<String> allergens, String foodNotes,
+                 OfferStatus status, Instant publishedAt, long version, Instant createdAt, Instant updatedAt) {
+        this(id, merchantId, title, description, category, priceMinor, originalPriceMinor, quantityTotal,
+                quantityReserved, reservationStartedAt, pickupStart, pickupEnd, allergensStatus, allergens,
+                foodNotes, status, publishedAt, version, createdAt, updatedAt, null);
     }
 
     public Offer(UUID id, UUID merchantId, String title, String description, OfferCategory category,
@@ -70,13 +82,31 @@ public record Offer(
                               List<String> allergens, String foodNotes, Instant now) {
         return new Offer(UUID.randomUUID(), merchantId, title, description, category, priceMinor,
                 originalPriceMinor, quantityTotal, 0, null, pickupStart, pickupEnd, allergensStatus,
-                allergens, foodNotes, OfferStatus.DRAFT, null, 0, now, now);
+                allergens, foodNotes, OfferStatus.DRAFT, null, 0, now, now, null);
+    }
+
+    public static Offer draft(UUID merchantId, String title, String description, OfferCategory category,
+                              int priceMinor, Integer originalPriceMinor, int quantityTotal,
+                              Instant pickupStart, Instant pickupEnd, AllergensStatus allergensStatus,
+                              List<String> allergens, String foodNotes, String imageUrl, Instant now) {
+        return new Offer(UUID.randomUUID(), merchantId, title, description, category, priceMinor,
+                originalPriceMinor, quantityTotal, 0, null, pickupStart, pickupEnd, allergensStatus,
+                allergens, foodNotes, OfferStatus.DRAFT, null, 0, now, now, imageUrl);
     }
 
     public Offer edit(String newTitle, String newDescription, OfferCategory newCategory, int newPriceMinor,
                       Integer newOriginalPriceMinor, int newQuantityTotal, Instant newPickupStart,
                       Instant newPickupEnd, AllergensStatus newAllergensStatus, List<String> newAllergens,
                       String newFoodNotes, long expectedVersion, Instant now) {
+        return edit(newTitle, newDescription, newCategory, newPriceMinor, newOriginalPriceMinor,
+                newQuantityTotal, newPickupStart, newPickupEnd, newAllergensStatus, newAllergens,
+                newFoodNotes, imageUrl, expectedVersion, now);
+    }
+
+    public Offer edit(String newTitle, String newDescription, OfferCategory newCategory, int newPriceMinor,
+                      Integer newOriginalPriceMinor, int newQuantityTotal, Instant newPickupStart,
+                      Instant newPickupEnd, AllergensStatus newAllergensStatus, List<String> newAllergens,
+                      String newFoodNotes, String newImageUrl, long expectedVersion, Instant now) {
         if (version != expectedVersion) throw new StaleOfferVersionException();
         if (status == OfferStatus.SUSPENDED || status == OfferStatus.EXPIRED || status == OfferStatus.CANCELLED) {
             throw new InvalidOfferStateException("This offer cannot be edited in its current state.");
@@ -91,7 +121,7 @@ public record Offer(
         return new Offer(id, merchantId, newTitle, newDescription, newCategory, newPriceMinor,
                 newOriginalPriceMinor, newQuantityTotal, quantityReserved, reservationStartedAt, newPickupStart, newPickupEnd,
                 newAllergensStatus, newAllergens, newFoodNotes, status, publishedAt,
-                version + 1, createdAt, now);
+                version + 1, createdAt, now, newImageUrl);
     }
 
     public Offer publish(Instant now) {
@@ -132,7 +162,7 @@ public record Offer(
     public Offer duplicate(Instant now) {
         return new Offer(UUID.randomUUID(), merchantId, title, description, category, priceMinor,
                 originalPriceMinor, quantityTotal, 0, null, null, null, allergensStatus, allergens,
-                foodNotes, OfferStatus.DRAFT, null, 0, now, now);
+                foodNotes, OfferStatus.DRAFT, null, 0, now, now, imageUrl);
     }
 
     public Offer cancel(Instant now) {
@@ -170,6 +200,20 @@ public record Offer(
         return new Offer(id, merchantId, title, description, category, priceMinor, originalPriceMinor,
                 total, reserved, reservationStartedAt, pickupStart, pickupEnd, allergensStatus, allergens, foodNotes,
                 nextStatus, nextPublishedAt, nextVersion, createdAt, now);
+    }
+
+    private static String validateImageUrl(String value) {
+        if (value == null || value.isBlank()) return null;
+        String candidate = value.trim();
+        if (candidate.length() > 2048) throw new InvalidOfferDataException("imageUrl is too long");
+        try {
+            java.net.URI uri = java.net.URI.create(candidate);
+            if (!("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme()))
+                    || uri.getHost() == null) throw new IllegalArgumentException();
+        } catch (IllegalArgumentException exception) {
+            throw new InvalidOfferDataException("imageUrl must be a valid HTTP or HTTPS URL");
+        }
+        return candidate;
     }
 
     private static String required(String value, String field, int max) {
