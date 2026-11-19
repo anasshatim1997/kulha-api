@@ -70,7 +70,7 @@ END,
         WHEN o.quantity_reserved > 0 THEN COALESCE(o.reservation_started_at, CURRENT_TIMESTAMP)
         ELSE o.reservation_started_at
     END,
-    quantity_reserved = LEAST(o.quantity_reserved, GREATEST(o.quantity_total - 1, 0)),
+    quantity_total = GREATEST(o.quantity_total, o.quantity_reserved + 1),
     version = o.version + 1,
     updated_at = CURRENT_TIMESTAMP
 FROM numbered n
@@ -167,6 +167,7 @@ BEGIN
           o.status <> 'PUBLISHED'
           OR o.image_url IS NULL
           OR o.image_url NOT LIKE 'https://images.unsplash.com/%'
+          OR o.quantity_total <= o.quantity_reserved
           OR o.pickup_start <= CURRENT_TIMESTAMP
           OR o.pickup_end <= o.pickup_start
           OR o.pickup_end > CURRENT_TIMESTAMP + INTERVAL '60 days'
