@@ -47,10 +47,10 @@ class OfferApiService implements OfferApi {
         return offers.findById(offerId).flatMap(offer ->
                 merchants.findApprovedPublicProfiles(List.of(offer.merchantId())).stream().findFirst()
                 .map((MerchantPublicProfile merchant) -> new OfferSnapshot(
-                        offer.id(), offer.merchantId(), offer.priceMinor(), offer.pickupStart(),
-                        offer.pickupEnd(), offer.status(), offer.availableUnits(), offer.title(),
-                        offer.category().name(), merchant.name(), merchant.address(), merchant.city(),
-                        merchant.pickupInstructions())));
+                        offer.id(), offer.merchantId(), offer.priceMinor(), offer.originalPriceMinor(),
+                        offer.pickupStart(), offer.pickupEnd(), offer.status(), offer.availableUnits(),
+                        offer.title(), offer.category().name(), merchant.name(), merchant.address(),
+                        merchant.city(), merchant.pickupInstructions())));
     }
     private void publishSearchRefresh(UUID offerId) {
         OfferEventEnvelope event = new OfferEventEnvelope(UUID.randomUUID(), "OfferChanged", 1, clock.instant(),

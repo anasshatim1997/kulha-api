@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: KULHA Reservations API
   version: 1.0.0
-  description: Customer pickup reservations. Prices and inventory are authoritative on the server.
+  description: Customer pickup reservations. Inventory, regular prices and booking totals are authoritative on the server.
 servers:
   - url: /api/v1
 paths:
@@ -27,7 +27,8 @@ paths:
           name: quantity
           schema: { type: integer, minimum: 1, default: 1, maximum: 500 }
       responses:
-        "200": { description: Live stock, pickup windows, and server-computed subtotal for requested quantity. }
+        "200":
+          description: Live inventory, exact pickup window, shop location, current and regular prices, and server-computed totals/savings for the selected quantity.
   /reservations:
     get:
       security: [{ bearerAuth: [] }]
@@ -93,3 +94,4 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
+      bearerFormat: JWT

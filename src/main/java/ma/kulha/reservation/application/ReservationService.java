@@ -55,14 +55,16 @@ public class ReservationService {
                 && (to == null || offer.pickupStart().isBefore(to));
         boolean reservable = intersects && offer.pickupStart().isAfter(now)
                 && offer.availableUnits() > 0 && offers.isReservable(offerId, now);
-        if (!reservable) return new ReservationAvailabilityResponse(offerId, offer.title(), offer.merchantId(),
-                offer.merchantName(), Math.max(0, offer.availableUnits()), 0, quantity,
-                offer.priceMinor(), null, "MAD", List.of());
-        int max = Math.min(maximumQuantity, offer.availableUnits());
-        Integer total = quantity <= max ? Math.multiplyExact(offer.priceMinor(), quantity) : null;
-        return new ReservationAvailabilityResponse(offerId, offer.title(), offer.merchantId(), offer.merchantName(),
-                offer.availableUnits(), max, quantity, offer.priceMinor(), total, "MAD",
-                List.of(new PickupSlot(offer.pickupStart(), offer.pickupEnd(), offer.availableUnits())));
+        int max = reservable ? Math.min(maximumQuantity, offer.availableUnits()) : 0;
+        Integer total = reservable && quantity <= max ? Math.multiplyExact(offer.priceMinor(), quantity) : null;
+        Integer originalTotal = total != null && offer.originalPriceMinor() != null
+                ? Math.multiplyExact(offer.originalPriceMinor(), quantity) : null;
+        Integer savings = originalTotal != null ? originalTotal - total : null;
+        return new ReservationAvailabilityResponse(offerId, offer.title(), offer.category(), offer.merchantId(),
+                offer.merchantName(), offer.merchantAddress(), offer.merchantCity(),
+                offer.merchantPickupInstructions(), Math.max(0, offer.availableUnits()), max, quantity,
+                offer.priceMinor(), offer.originalPriceMinor(), total, originalTotal, savings, "MAD",
+                reservable ? List.of(new PickupSlot(offer.pickupStart(), offer.pickupEnd(), offer.availableUnits())) : List.of());
     }
     @Transactional
     public ReservationResponse create(UUID customerId, CreateReservationRequest request, Locale locale) {
@@ -137,7 +139,7 @@ public class ReservationService {
         return ReservationResponse.from(cancelled, locale, now);
     }
     private static ReservationAvailabilityResponse unavailable(UUID offerId, int quantity) {
-        return new ReservationAvailabilityResponse(offerId, null, null, null, 0, 0, quantity,
-                null, null, "MAD", List.of());
+        return new ReservationAvailabilityResponse(offerId, null, null, null, null, null, null,
+                0, 0, quantity, null, null, null, null, null, "MAD", List.of());
     }
 }
