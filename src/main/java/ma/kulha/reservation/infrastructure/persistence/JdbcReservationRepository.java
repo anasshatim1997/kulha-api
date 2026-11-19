@@ -58,6 +58,57 @@ class JdbcReservationRepository implements ReservationRepository {
         return jdbc.sql(SELECT + " WHERE reference = :reference FOR UPDATE").param("reference", reference)
                 .query(JdbcReservationRepository::map).optional();
     }
+    @Override public Optional<Reservation> findByPickupCredentialHashForUpdate(String tokenHash, Instant now) {
+        return jdbc.sql("""
+                SELECT r.id, r.reference, r.customer_id, r.offer_id, r.merchant_id, r.offer_title, r.offer_category,
+                       r.merchant_name, r.merchant_address, r.merchant_city, r.merchant_pickup_instructions,
+                       r.pickup_start, r.pickup_end, r.pickup_code, r.quantity, r.unit_price_minor, r.total_price_minor,
+                       r.status, r.created_at, r.updated_at
+                FROM reservation.reservations r
+                JOIN reservation.pickup_credentials c ON c.reservation_id = r.id
+                WHERE c.token_hash = :hash AND c.used_at IS NULL AND c.expires_at > :now
+                FOR UPDATE OF r, c
+                """)
+                .param("hash", tokenHash).param("now", toDb(now), Types.TIMESTAMP_WITH_TIMEZONE)
+                .query(JdbcReservationRepository::map).optional();
+    }
+    @Override public void insertPickupCredential(UUID reservationId, String tokenHash, Instant expiresAt, Instant createdAt) {
+        jdbc.sql("""
+                INSERT INTO reservation.pickup_credentials
+                    (id, reservation_id, token_hash, expires_at, created_at)
+                VALUES (:id, :reservation, :hash, :expiresAt, :createdAt)
+                """)
+                .param("id", UUID.randomUUID()).param("reservation", reservationId).param("hash", tokenHash)
+                .param("expiresAt", toDb(expiresAt), Types.TIMESTAMP_WITH_TIMEZONE)
+                .param("createdAt", toDb(createdAt), Types.TIMESTAMP_WITH_TIMEZONE).update();
+    }
+    @Override public void markPickupCredentialsUsed(UUID reservationId, Instant usedAt) {
+        jdbc.sql("""
+                UPDATE reservation.pickup_credentials SET used_at = :usedAt
+                WHERE reservation_id = :reservation AND used_at IS NULL
+                """)
+                .param("usedAt", toDb(usedAt), Types.TIMESTAMP_WITH_TIMEZONE)
+                .param("reservation", reservationId).update();
+    }
+    @Override public void recordCancellationEvent(Reservation r, String reasonCode, String comment, UUID actorId, Instant occurredAt) {
+        long secondsBeforePickup = Math.max(0, java.time.Duration.between(occurredAt, r.pickupStart()).getSeconds());
+        jdbc.sql("""
+                INSERT INTO reservation.cancellation_events
+                    (event_id, reservation_id, reference, customer_id, merchant_id, offer_id, offer_category,
+                     city, quantity, total_price_minor, pickup_start, pickup_end, seconds_before_pickup,
+                     reason_code, reason_comment, actor_type, actor_id, occurred_at, schema_version)
+                VALUES (:event, :reservation, :reference, :customer, :merchant, :offer, :category,
+                        :city, :quantity, :total, :pickupStart, :pickupEnd, :leadSeconds,
+                        :reason, :comment, 'CUSTOMER', :actor, :occurred, 1)
+                """)
+                .param("event", UUID.randomUUID()).param("reservation", r.id()).param("reference", r.reference())
+                .param("customer", r.customerId()).param("merchant", r.merchantId()).param("offer", r.offerId())
+                .param("category", r.offerCategory()).param("city", r.merchantCity()).param("quantity", r.quantity())
+                .param("total", r.totalPriceMinor()).param("pickupStart", toDb(r.pickupStart()), Types.TIMESTAMP_WITH_TIMEZONE)
+                .param("pickupEnd", toDb(r.pickupEnd()), Types.TIMESTAMP_WITH_TIMEZONE).param("leadSeconds", secondsBeforePickup)
+                .param("reason", reasonCode).param("comment", comment, Types.VARCHAR).param("actor", actorId)
+                .param("occurred", toDb(occurredAt), Types.TIMESTAMP_WITH_TIMEZONE).update();
+    }
     @Override public boolean updateStatus(Reservation r, ReservationStatus expectedStatus) {
         return jdbc.sql("""
                 UPDATE reservation.reservations SET status = :status, updated_at = :updatedAt

@@ -4,6 +4,8 @@ import java.util.Locale;
 import java.util.UUID;
 import jakarta.validation.Valid;
 import ma.kulha.reservation.application.ReservationService;
+import ma.kulha.reservation.interfaces.dto.CancelReservationRequest;
+import ma.kulha.reservation.interfaces.dto.CollectReservationRequest;
 import ma.kulha.reservation.interfaces.dto.CreateReservationRequest;
 import ma.kulha.reservation.interfaces.dto.ReservationAvailabilityResponse;
 import ma.kulha.reservation.interfaces.dto.ReservationResponse;
@@ -49,8 +51,13 @@ public class ReservationController {
                 hasRole(authentication, "MERCHANT"), locale());
     }
     @PatchMapping("/{reference}/cancel")
-    ReservationResponse cancel(@PathVariable String reference, Authentication authentication) {
-        return reservations.cancel(reference, userId(authentication), locale());
+    ReservationResponse cancel(@PathVariable String reference, @Valid @RequestBody(required = false) CancelReservationRequest request,
+            Authentication authentication) {
+        return reservations.cancel(reference, userId(authentication), request, locale());
+    }
+    @PostMapping("/collect")
+    ReservationResponse collect(@Valid @RequestBody CollectReservationRequest request, Authentication authentication) {
+        return reservations.collect(request, userId(authentication), locale());
     }
     private static UUID userId(Authentication authentication) { return UUID.fromString(authentication.getName()); }
     private static boolean hasRole(Authentication authentication, String role) {
