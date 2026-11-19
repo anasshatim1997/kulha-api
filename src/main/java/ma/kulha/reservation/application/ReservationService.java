@@ -10,6 +10,7 @@ import ma.kulha.merchant.application.MerchantApi;
 import ma.kulha.offer.application.OfferApi;
 import ma.kulha.offer.application.OfferSnapshot;
 import ma.kulha.reservation.domain.model.CancellationReasonCode;
+import ma.kulha.reservation.domain.model.InvalidReservationStateException;
 import ma.kulha.reservation.domain.model.Reservation;
 import ma.kulha.reservation.domain.model.ReservationFilter;
 import ma.kulha.reservation.domain.model.ReservationStatus;
