@@ -61,6 +61,13 @@ class OfferTest {
                         .containsKey("pickupEnd"));
     }
 
+    @Test void publishAllowsPickupEndAtTheSixtyDayBoundary() {
+        Offer atBoundary = Offer.draft(UUID.randomUUID(), "Basket", "Food", OfferCategory.OTHER,
+                500, null, 2, now.plus(Duration.ofDays(59)), now.plus(Duration.ofDays(60)),
+                AllergensStatus.UNKNOWN, List.of(), null, now);
+        assertThat(atBoundary.publish(now).status()).isEqualTo(OfferStatus.PUBLISHED);
+    }
+
     @Test void publishRejectsPickupEndMoreThanSixtyDaysAhead() {
         Offer tooFar = Offer.draft(UUID.randomUUID(), "Basket", "Food", OfferCategory.OTHER,
                 500, null, 2, now.plus(Duration.ofDays(59)).plusSeconds(23 * 3600),
