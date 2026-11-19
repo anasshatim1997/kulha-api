@@ -136,8 +136,8 @@ public record Offer(
             if (Duration.between(pickupStart, pickupEnd).compareTo(Duration.ofHours(24)) > 0) {
                 fieldErrors.put("pickupEnd", "Pickup window cannot exceed 24 hours");
             }
-            if (pickupEnd.isAfter(now.plus(Duration.ofDays(7)))) {
-                fieldErrors.put("pickupEnd", "Pickup end must be within 7 days");
+            if (pickupEnd.isAfter(now.plus(Duration.ofDays(60)))) {
+                fieldErrors.put("pickupEnd", "Pickup end must be within 60 days");
             }
         }
         if (!fieldErrors.isEmpty()) throw new InvalidOfferWindowException(fieldErrors);
