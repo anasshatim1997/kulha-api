@@ -167,6 +167,7 @@ BEGIN
           o.status <> 'PUBLISHED'
           OR o.image_url IS NULL
           OR o.image_url NOT LIKE 'https://images.unsplash.com/%'
+          OR o.quantity_total <= o.quantity_reserved
           OR o.pickup_start <= CURRENT_TIMESTAMP
           OR o.pickup_end <= o.pickup_start
           OR o.pickup_end > CURRENT_TIMESTAMP + INTERVAL '60 days'
