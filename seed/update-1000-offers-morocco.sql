@@ -189,7 +189,7 @@ BEGIN
       AND m.latitude IS NOT NULL
       AND m.longitude IS NOT NULL;
 
-    IF invalid_count <> 0 OR image_count <> 1000 OR merchant_count = 0
+    IF invalid_count <> 0 OR image_count <> 1000 OR merchant_count <> 40
        OR distinct_map_points <> merchant_count THEN
         RAISE EXCEPTION 'Test data validation failed: invalid offers %, images %, Moroccan merchants %, distinct map points %.',
             invalid_count, image_count, merchant_count, distinct_map_points;
