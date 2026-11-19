@@ -46,6 +46,8 @@ public abstract class AbstractApiIntegrationTest {
     protected void resetState() {
         mvc = MockMvcBuilders.webAppContextSetup(context).addFilters(correlationIdFilter)
                 .apply(springSecurity()).build();
+        jdbc.sql("DELETE FROM reservation.cancellation_events").update();
+        jdbc.sql("DELETE FROM reservation.pickup_credentials").update();
         jdbc.sql("DELETE FROM reservation.reservations").update();
         jdbc.sql("DELETE FROM offer.idempotency_keys").update();
         jdbc.sql("DELETE FROM offer.offers").update();

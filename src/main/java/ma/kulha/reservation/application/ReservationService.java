@@ -1,4 +1,6 @@
 package ma.kulha.reservation.application;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -9,9 +11,12 @@ import ma.kulha.merchant.application.MerchantApi;
 import ma.kulha.offer.application.OfferApi;
 import ma.kulha.offer.application.OfferSnapshot;
 import ma.kulha.reservation.domain.model.Reservation;
+import ma.kulha.reservation.domain.model.ReservationCancellationReason;
 import ma.kulha.reservation.domain.model.ReservationFilter;
 import ma.kulha.reservation.domain.model.ReservationStatus;
 import ma.kulha.reservation.domain.repository.ReservationRepository;
+import ma.kulha.reservation.interfaces.dto.CancelReservationRequest;
+import ma.kulha.reservation.interfaces.dto.CollectReservationRequest;
 import ma.kulha.reservation.interfaces.dto.CreateReservationRequest;
 import ma.kulha.reservation.interfaces.dto.ReservationAvailabilityResponse;
 import ma.kulha.reservation.interfaces.dto.ReservationAvailabilityResponse.PickupSlot;
@@ -22,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ReservationService {
+    private static final String QR_PREFIX = "KULHA1:";
     private final ReservationRepository reservations;
     private final OfferApi offers;
     private final MerchantApi merchants;
@@ -94,7 +100,8 @@ public class ReservationService {
                 locked.pickupStart(), locked.pickupEnd(), pickupCode, request.quantity(), locked.priceMinor(), now);
         Reservation confirmed = pending.confirm(now);
         reservations.insert(confirmed);
-        return ReservationResponse.from(confirmed, locale, now);
+        String qrPayload = issuePickupCredential(confirmed, now);
+        return ReservationResponse.from(confirmed, locale, now, qrPayload);
     }
     @Transactional
     public ReservationResponse get(String reference, UUID userId, boolean admin, boolean merchantStaff, Locale locale) {
@@ -112,7 +119,8 @@ public class ReservationService {
         boolean authorizedMerchant = merchantStaff && merchants.resolveActingMerchant(userId)
                 .filter(reservation.merchantId()::equals).isPresent();
         if (!owner && !admin && !authorizedMerchant) throw new ReservationNotFoundException();
-        return ReservationResponse.from(reservation, locale, now);
+        String qrPayload = owner ? issuePickupCredential(reservation, now) : null;
+        return ReservationResponse.from(reservation, locale, now, qrPayload);
     }
     @Transactional
     public PageResponse<ReservationResponse> list(UUID customerId, String status, int page, int size, Locale locale) {
@@ -127,15 +135,70 @@ public class ReservationService {
         return new PageResponse<>(items, page, safeSize, reservations.count(customerId, filter, now));
     }
     @Transactional
-    public ReservationResponse cancel(String reference, UUID customerId, Locale locale) {
+    public ReservationResponse cancel(String reference, UUID customerId, CancelReservationRequest request, Locale locale) {
         Instant now = clock.instant();
         Reservation reservation = reservations.findByReferenceForUpdate(reference).orElseThrow(ReservationNotFoundException::new);
         if (!reservation.customerId().equals(customerId)) throw new ReservationNotFoundException();
+        ReservationCancellationReason reason = ReservationCancellationReason.parse(request == null ? null : request.reasonCode());
+        String comment = request == null || request.comment() == null ? null : request.comment().trim();
+        if (comment != null && comment.isEmpty()) comment = null;
         Reservation cancelled = reservation.cancel(now);
         if (!reservations.updateStatus(cancelled, reservation.status()))
             throw new ReservationConflictException("The reservation changed. Refresh and try again.");
+        reservations.recordCancellationEvent(reservation, reason.name(), comment, customerId, now);
         offers.releaseUnits(reservation.offerId(), reservation.quantity());
+        reservations.markPickupCredentialsUsed(reservation.id(), now);
         return ReservationResponse.from(cancelled, locale, now);
+    }
+    @Transactional
+    public ReservationResponse collect(CollectReservationRequest request, UUID merchantUserId, Locale locale) {
+        Instant now = clock.instant();
+        if (request == null) throw new InvalidReservationRequestException("A QR token or pickup code is required.");
+        UUID merchantId = merchants.resolveActingMerchant(merchantUserId)
+                .orElseThrow(ReservationNotFoundException::new);
+        Reservation reservation;
+        String tokenHash = null;
+        if (request.qrPayload() != null && !request.qrPayload().isBlank()) {
+            String payload = request.qrPayload().trim();
+            if (!payload.startsWith(QR_PREFIX) || payload.length() > 100)
+                throw new InvalidReservationRequestException("The QR code is invalid.");
+            String token = payload.substring(QR_PREFIX.length());
+            if (token.length() < 40 || token.length() > 60)
+                throw new InvalidReservationRequestException("The QR code is invalid.");
+            tokenHash = ReservationReferenceGenerator.hashPickupQrToken(token);
+            reservation = reservations.findByPickupCredentialHashForUpdate(tokenHash, now)
+                    .orElseThrow(ReservationNotFoundException::new);
+        } else {
+            if (request.reference() == null || request.pickupCode() == null || request.pickupCode().isBlank())
+                throw new InvalidReservationRequestException("Enter the reservation reference and pickup code.");
+            reservation = reservations.findByReferenceForUpdate(request.reference().trim())
+                    .orElseThrow(ReservationNotFoundException::new);
+            if (!MessageDigest.isEqual(reservation.pickupCode().getBytes(StandardCharsets.UTF_8),
+                    request.pickupCode().trim().toUpperCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8)))
+                throw new ReservationNotFoundException();
+        }
+        if (!reservation.merchantId().equals(merchantId)) throw new ReservationNotFoundException();
+        if (reservation.status() != ReservationStatus.CONFIRMED)
+            throw new ReservationConflictException("This reservation has already been collected, cancelled or expired.");
+        if (now.isBefore(reservation.pickupStart()))
+            throw new ReservationConflictException("The pickup window has not started yet.");
+        if (!now.isBefore(reservation.pickupEnd())) {
+            Reservation expired = reservation.expire(now);
+            reservations.updateStatus(expired, reservation.status());
+            throw new ReservationConflictException("The pickup window has expired.");
+        }
+        Reservation completed = reservation.complete(now);
+        if (!reservations.updateStatus(completed, reservation.status()))
+            throw new ReservationConflictException("The reservation changed while it was being collected.");
+        reservations.markPickupCredentialsUsed(reservation.id(), now);
+        return ReservationResponse.from(completed, locale, now);
+    }
+    private String issuePickupCredential(Reservation reservation, Instant now) {
+        if (reservation.status() != ReservationStatus.CONFIRMED || !reservation.pickupEnd().isAfter(now)) return null;
+        String token = references.pickupQrToken();
+        reservations.insertPickupCredential(reservation.id(),
+                ReservationReferenceGenerator.hashPickupQrToken(token), reservation.pickupEnd(), now);
+        return QR_PREFIX + token;
     }
     private static ReservationAvailabilityResponse unavailable(UUID offerId, int quantity) {
         return new ReservationAvailabilityResponse(offerId, null, null, null, null, null, null, null,

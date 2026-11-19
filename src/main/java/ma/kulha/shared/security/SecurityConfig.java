@@ -37,6 +37,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/merchants/me/offers", "/api/v1/merchants/me/offers/**").hasRole("MERCHANT")
                 .requestMatchers(HttpMethod.GET, "/api/v1/reservations/availability").hasRole("CUSTOMER")
                 .requestMatchers(HttpMethod.GET, "/api/v1/reservations").hasRole("CUSTOMER")
+                .requestMatchers(HttpMethod.POST, "/api/v1/reservations/collect").hasRole("MERCHANT")
                 .requestMatchers(HttpMethod.POST, "/api/v1/reservations").hasRole("CUSTOMER")
                 .requestMatchers(HttpMethod.PATCH, "/api/v1/reservations/*/cancel").hasRole("CUSTOMER")
                 .requestMatchers(HttpMethod.GET, "/api/v1/reservations/*").hasAnyRole("CUSTOMER", "MERCHANT", "ADMIN")

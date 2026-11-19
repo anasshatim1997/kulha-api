@@ -78,6 +78,24 @@ paths:
       responses:
         "200": { description: Reservation snapshot for owner or authorized staff. }
         "404": { description: Missing or unauthorized reservation. }
+  /reservations/collect:
+    post:
+      security: [{ bearerAuth: [] }]
+      description: Merchant-only collection. Accepts a short-lived one-use QR payload or a reservation reference plus human-readable pickup code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                qrPayload: { type: string, maxLength: 100 }
+                reference: { type: string, maxLength: 40 }
+                pickupCode: { type: string, maxLength: 12 }
+      responses:
+        "200": { description: Reservation collected and all active QR credentials invalidated. }
+        "404": { description: Invalid, already-used, expired, or wrong-merchant credential. }
+        "409": { description: Reservation is not collectible in its current state. }
   /reservations/{reference}/cancel:
     patch:
       security: [{ bearerAuth: [] }]
@@ -86,8 +104,17 @@ paths:
           name: reference
           required: true
           schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reasonCode: { type: string, enum: [NOT_SPECIFIED, PICKUP_TIME, TOO_FAR, CHANGED_MIND, FOUND_ALTERNATIVE, OFFER_EXPECTATION, BOOKED_BY_MISTAKE, OTHER] }
+                comment: { type: string, maxLength: 500 }
       responses:
-        "200": { description: Cancelled reservation and released inventory. }
+        "200": { description: Cancelled reservation, released inventory, and recorded a structured cancellation event. }
         "409": { description: Reservation is no longer cancellable. }
 components:
   securitySchemes:
