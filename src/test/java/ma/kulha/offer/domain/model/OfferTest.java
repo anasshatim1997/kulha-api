@@ -61,10 +61,10 @@ class OfferTest {
                         .containsKey("pickupEnd"));
     }
 
-    @Test void publishRejectsPickupEndMoreThanSevenDaysAhead() {
+    @Test void publishRejectsPickupEndMoreThanSixtyDaysAhead() {
         Offer tooFar = Offer.draft(UUID.randomUUID(), "Basket", "Food", OfferCategory.OTHER,
-                500, null, 2, now.plus(Duration.ofDays(6)).plusSeconds(23 * 3600),
-                now.plus(Duration.ofDays(7)).plusSeconds(3601), AllergensStatus.UNKNOWN, List.of(), null, now);
+                500, null, 2, now.plus(Duration.ofDays(59)).plusSeconds(23 * 3600),
+                now.plus(Duration.ofDays(60)).plusSeconds(3601), AllergensStatus.UNKNOWN, List.of(), null, now);
         assertThatThrownBy(() -> tooFar.publish(now))
                 .isInstanceOf(InvalidOfferWindowException.class)
                 .satisfies(error -> assertThat(((InvalidOfferWindowException) error).fieldErrors())
