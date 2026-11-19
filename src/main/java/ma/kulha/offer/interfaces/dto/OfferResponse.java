@@ -12,11 +12,11 @@ public record OfferResponse(UUID id, UUID merchantId, String title, String descr
                             int priceMinor, Integer originalPriceMinor, int quantityTotal, int quantityReserved,
                             int availableUnits, Instant pickupStart, Instant pickupEnd,
                             AllergensStatus allergensStatus, List<String> allergens, String foodNotes,
-                            OfferStatus status, Instant publishedAt, long version, Instant createdAt, Instant updatedAt) {
+                            OfferStatus status, Instant publishedAt, long version, Instant createdAt, Instant updatedAt, String imageUrl) {
     public static OfferResponse from(Offer o) {
         return new OfferResponse(o.id(), o.merchantId(), o.title(), o.description(), o.category(), o.priceMinor(),
                 o.originalPriceMinor(), o.quantityTotal(), o.quantityReserved(), o.availableUnits(), o.pickupStart(),
                 o.pickupEnd(), o.allergensStatus(), o.allergens(), o.foodNotes(), o.status(), o.publishedAt(),
-                o.version(), o.createdAt(), o.updatedAt());
+                o.version(), o.createdAt(), o.updatedAt(), o.imageUrl());
     }
 }

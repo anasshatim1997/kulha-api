@@ -110,7 +110,7 @@ class OfferSearchIndexListener {
                         offer.category().name(), offer.priceMinor(), offer.originalPriceMinor(), offer.quantityTotal(),
                         offer.availableUnits(), offer.pickupStart(), offer.pickupEnd(), offer.publishedAt(), offer.createdAt(),
                         merchant.name(), merchant.city(), merchant.district(), merchant.address(), merchant.pickupInstructions(),
-                        offer.allergens(), offer.allergensStatus().name(), offer.foodNotes(), merchant.latitude(), merchant.longitude()));
+                        offer.allergens(), offer.allergensStatus().name(), offer.foodNotes(), offer.imageUrl(), merchant.latitude(), merchant.longitude()));
                 upsertIds.add(offer.id());
             }
             List<UUID> deletes = ids.stream().filter(id -> !upsertIds.contains(id)).toList();

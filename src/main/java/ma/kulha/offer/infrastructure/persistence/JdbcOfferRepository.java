@@ -27,7 +27,7 @@ class JdbcOfferRepository implements OfferRepository {
     private static final String SELECT = """
             SELECT id, merchant_id, title, description, category, price_minor, original_price_minor,
                    quantity_total, quantity_reserved, reservation_started_at, pickup_start, pickup_end, allergens_status,
-                   allergens, food_notes, status, published_at, version, created_at, updated_at
+                   allergens, food_notes, status, published_at, version, created_at, updated_at, image_url
             FROM offer.offers
             """;
 
@@ -46,10 +46,10 @@ class JdbcOfferRepository implements OfferRepository {
         jdbc.sql("""
                 INSERT INTO offer.offers (id, merchant_id, title, description, category, price_minor,
                     original_price_minor, quantity_total, quantity_reserved, reservation_started_at, pickup_start, pickup_end,
-                    allergens_status, allergens, food_notes, status, published_at, version, created_at, updated_at)
+                    allergens_status, allergens, food_notes, status, published_at, version, created_at, updated_at, image_url)
                 VALUES (:id, :merchant, :title, :description, :category, :price, :originalPrice,
                     :total, :reserved, :reservationStartedAt, :pickupStart, :pickupEnd, :allergensStatus, CAST(:allergens AS varchar[]),
-                    :foodNotes, :status, :publishedAt, :version, :createdAt, :updatedAt)
+                    :foodNotes, :status, :publishedAt, :version, :createdAt, :updatedAt, :imageUrl)
                 """)
                 .param("id", o.id()).param("merchant", o.merchantId()).param("title", o.title())
                 .param("description", o.description()).param("category", o.category().name())
@@ -63,7 +63,8 @@ class JdbcOfferRepository implements OfferRepository {
                 .param("foodNotes", o.foodNotes(), Types.VARCHAR).param("status", o.status().name())
                 .param("publishedAt", toDb(o.publishedAt()), Types.TIMESTAMP_WITH_TIMEZONE)
                 .param("version", o.version()).param("createdAt", toDb(o.createdAt()), Types.TIMESTAMP_WITH_TIMEZONE)
-                .param("updatedAt", toDb(o.updatedAt()), Types.TIMESTAMP_WITH_TIMEZONE).update();
+                .param("updatedAt", toDb(o.updatedAt()), Types.TIMESTAMP_WITH_TIMEZONE)
+                .param("imageUrl", o.imageUrl(), Types.VARCHAR).update();
     }
 
     @Override
@@ -107,7 +108,7 @@ class JdbcOfferRepository implements OfferRepository {
         String filter = status == null ? "" : " AND status = :status";
         JdbcClient.StatementSpec query = jdbc.sql("""
                 SELECT id, title, category, price_minor, quantity_total, quantity_reserved,
-                       pickup_start, pickup_end, status, created_at, version
+                       pickup_start, pickup_end, status, created_at, version, image_url
                 FROM offer.offers WHERE merchant_id = :merchant
                 """ + filter + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset")
                 .param("merchant", merchantId).param("limit", limit).param("offset", offset);
@@ -117,7 +118,7 @@ class JdbcOfferRepository implements OfferRepository {
                 rs.getInt("price_minor"), rs.getInt("quantity_total"), rs.getInt("quantity_reserved"),
                 toInstant(rs.getObject("pickup_start", OffsetDateTime.class)),
                 toInstant(rs.getObject("pickup_end", OffsetDateTime.class)), OfferStatus.valueOf(rs.getString("status")),
-                toInstant(rs.getObject("created_at", OffsetDateTime.class)), rs.getLong("version"))).list();
+                toInstant(rs.getObject("created_at", OffsetDateTime.class)), rs.getLong("version"), rs.getString("image_url"))).list();
     }
 
     @Override
@@ -142,7 +143,7 @@ class JdbcOfferRepository implements OfferRepository {
                     price_minor=:price, original_price_minor=:originalPrice, quantity_total=:total,
                     pickup_start=:pickupStart, pickup_end=:pickupEnd, allergens_status=:allergensStatus,
                     allergens=CAST(:allergens AS varchar[]), food_notes=:foodNotes, status=:status,
-                    published_at=:publishedAt, version=:version, updated_at=:updatedAt
+                    published_at=:publishedAt, version=:version, updated_at=:updatedAt, image_url=:imageUrl
                 WHERE id=:id AND version=:expected AND quantity_reserved=:expectedReserved
                   AND reservation_started_at IS NOT DISTINCT FROM :expectedReservationStartedAt
                 """)
@@ -154,6 +155,7 @@ class JdbcOfferRepository implements OfferRepository {
                 .param("foodNotes", o.foodNotes(), Types.VARCHAR).param("status", o.status().name())
                 .param("publishedAt", toDb(o.publishedAt()), Types.TIMESTAMP_WITH_TIMEZONE)
                 .param("version", o.version()).param("updatedAt", toDb(o.updatedAt()), Types.TIMESTAMP_WITH_TIMEZONE)
+                .param("imageUrl", o.imageUrl(), Types.VARCHAR)
                 .param("id", o.id()).param("expected", expectedVersion)
                 .param("expectedReserved", o.quantityReserved())
                 .param("expectedReservationStartedAt", toDb(o.reservationStartedAt()), Types.TIMESTAMP_WITH_TIMEZONE).update() == 1;
@@ -200,7 +202,7 @@ class JdbcOfferRepository implements OfferRepository {
                 )
                 SELECT id, merchant_id, title, description, category, price_minor, original_price_minor,
                        quantity_total, quantity_reserved, reservation_started_at, pickup_start, pickup_end, allergens_status,
-                       allergens, food_notes, status, published_at, version, created_at, updated_at
+                       allergens, food_notes, status, published_at, version, created_at, updated_at, image_url
                 FROM updated ORDER BY pickup_end, id
                 """).param("now", toDb(now), Types.TIMESTAMP_WITH_TIMEZONE).param("limit", limit)
                 .query(JdbcOfferRepository::mapOffer).list();
@@ -218,7 +220,7 @@ class JdbcOfferRepository implements OfferRepository {
         return """
                 SELECT id, merchant_id, title, description, category, price_minor, original_price_minor,
                        quantity_total, quantity_total - quantity_reserved AS available_units,
-                       pickup_start, pickup_end, allergens_status, allergens, food_notes, published_at
+                       pickup_start, pickup_end, allergens_status, allergens, food_notes, published_at, image_url
                 FROM offer.offers
                 """;
     }
@@ -233,7 +235,7 @@ class JdbcOfferRepository implements OfferRepository {
                 toInstant(rs.getObject("pickup_start", OffsetDateTime.class)),
                 toInstant(rs.getObject("pickup_end", OffsetDateTime.class)),
                 AllergensStatus.valueOf(rs.getString("allergens_status")), allergens, rs.getString("food_notes"),
-                toInstant(rs.getObject("published_at", OffsetDateTime.class)));
+                toInstant(rs.getObject("published_at", OffsetDateTime.class)), rs.getString("image_url"));
     }
 
     private static Offer mapOffer(ResultSet rs, int row) throws SQLException {
@@ -247,7 +249,7 @@ class JdbcOfferRepository implements OfferRepository {
                 toInstant(rs.getObject("pickup_end", OffsetDateTime.class)), AllergensStatus.valueOf(rs.getString("allergens_status")),
                 allergens, rs.getString("food_notes"), OfferStatus.valueOf(rs.getString("status")),
                 toInstant(rs.getObject("published_at", OffsetDateTime.class)), rs.getLong("version"),
-                toInstant(rs.getObject("created_at", OffsetDateTime.class)), toInstant(rs.getObject("updated_at", OffsetDateTime.class)));
+                toInstant(rs.getObject("created_at", OffsetDateTime.class)), toInstant(rs.getObject("updated_at", OffsetDateTime.class)), rs.getString("image_url"));
     }
 
     private static String arrayLiteral(List<String> values) {

@@ -49,12 +49,20 @@ public class OfferApplicationService {
                         Integer originalPriceMinor, int quantity, Instant pickupStart, Instant pickupEnd,
                         AllergensStatus allergensStatus, List<String> allergens, String foodNotes) {
         return create(ownerId, title, description, category, priceMinor, originalPriceMinor, quantity,
-                pickupStart, pickupEnd, allergensStatus, allergens, foodNotes, null, null);
+                pickupStart, pickupEnd, allergensStatus, allergens, foodNotes, null, null, null);
     }
 
     public Offer create(UUID ownerId, String title, String description, OfferCategory category, int priceMinor,
                         Integer originalPriceMinor, int quantity, Instant pickupStart, Instant pickupEnd,
                         AllergensStatus allergensStatus, List<String> allergens, String foodNotes,
+                        String idempotencyKey, String requestHash) {
+        return create(ownerId, title, description, category, priceMinor, originalPriceMinor, quantity,
+                pickupStart, pickupEnd, allergensStatus, allergens, foodNotes, null, idempotencyKey, requestHash);
+    }
+
+    public Offer create(UUID ownerId, String title, String description, OfferCategory category, int priceMinor,
+                        Integer originalPriceMinor, int quantity, Instant pickupStart, Instant pickupEnd,
+                        AllergensStatus allergensStatus, List<String> allergens, String foodNotes, String imageUrl,
                         String idempotencyKey, String requestHash) {
         UUID merchantId = requireMerchant(ownerId);
         return tx.execute(status -> {
@@ -71,7 +79,7 @@ public class OfferApplicationService {
             if (!merchants.isApproved(merchantId)) throw new MerchantNotApprovedException();
             if (offers.countActiveByMerchant(merchantId) >= 50) throw new OfferLimitExceededException();
             Offer offer = Offer.draft(merchantId, title, description, category, priceMinor, originalPriceMinor,
-                    quantity, pickupStart, pickupEnd, allergensStatus, allergens, foodNotes, clock.instant());
+                    quantity, pickupStart, pickupEnd, allergensStatus, allergens, foodNotes, imageUrl, clock.instant());
             offers.insert(offer);
             Offer persisted = offers.findById(offer.id()).orElseThrow(OfferNotFoundException::new);
             if (idempotencyKey != null) idempotency.save(ownerId, idempotencyKey, requestHash, offer.id());
@@ -98,11 +106,19 @@ public class OfferApplicationService {
                       OfferCategory category, int priceMinor, Integer originalPriceMinor, int quantity,
                       Instant pickupStart, Instant pickupEnd, AllergensStatus allergensStatus,
                       List<String> allergens, String foodNotes) {
+        return edit(ownerId, offerId, version, title, description, category, priceMinor, originalPriceMinor,
+                quantity, pickupStart, pickupEnd, allergensStatus, allergens, foodNotes, null);
+    }
+
+    public Offer edit(UUID ownerId, UUID offerId, long version, String title, String description,
+                      OfferCategory category, int priceMinor, Integer originalPriceMinor, int quantity,
+                      Instant pickupStart, Instant pickupEnd, AllergensStatus allergensStatus,
+                      List<String> allergens, String foodNotes, String imageUrl) {
         UUID merchantId = requireMerchant(ownerId);
         return tx.execute(status -> {
             Offer current = owned(merchantId, offerId);
             Offer updated = current.edit(title, description, category, priceMinor, originalPriceMinor,
-                    quantity, pickupStart, pickupEnd, allergensStatus, allergens, foodNotes, version, clock.instant());
+                    quantity, pickupStart, pickupEnd, allergensStatus, allergens, foodNotes, imageUrl, version, clock.instant());
             if (!offers.update(updated, version)) throw new ma.kulha.offer.domain.model.StaleOfferVersionException();
             if (current.quantityTotal() != updated.quantityTotal()) {
                 audit.append(ownerId, "OFFER_QUANTITY_CHANGED", "OFFER", offerId.toString(),

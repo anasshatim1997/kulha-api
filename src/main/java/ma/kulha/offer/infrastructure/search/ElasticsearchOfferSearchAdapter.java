@@ -229,6 +229,7 @@ class ElasticsearchOfferSearchAdapter implements ElasticsearchOfferSearch {
         body.put("allergens", document.allergens());
         body.put("allergensStatus", document.allergensStatus());
         body.put("foodNotes", document.foodNotes());
+        body.put("imageUrl", document.imageUrl());
         body.put("shopLocation", document.latitude() == null || document.longitude() == null
                 ? null : Map.of("lat", document.latitude(), "lon", document.longitude()));
         Integer original = document.originalPriceMinor();
@@ -383,6 +384,7 @@ class ElasticsearchOfferSearchAdapter implements ElasticsearchOfferSearch {
                 source.path("pickupInstructions").asString(null),
                 mapper.convertValue(source.path("allergens"), STRING_LIST),
                 source.path("allergensStatus").asString(), source.path("foodNotes").asString(null),
+                source.path("imageUrl").asString(null),
                 source.path("shopLocation").path("lat").isNumber() ? source.path("shopLocation").path("lat").asDouble() : null,
                 source.path("shopLocation").path("lon").isNumber() ? source.path("shopLocation").path("lon").asDouble() : null);
     }
@@ -473,6 +475,7 @@ class ElasticsearchOfferSearchAdapter implements ElasticsearchOfferSearch {
                 Map.entry("allergens", Map.of("type", "keyword", "index", false)),
                 Map.entry("allergensStatus", Map.of("type", "keyword", "index", false)),
                 Map.entry("foodNotes", Map.of("type", "text", "index", false)),
+                Map.entry("imageUrl", Map.of("type", "keyword", "index", false)),
                 Map.entry("shopLocation", Map.of("type", "geo_point")),
                 Map.entry("savingsPercent", Map.of("type", "scaled_float", "scaling_factor", 100))));
 

@@ -9,9 +9,9 @@ import ma.kulha.offer.domain.model.OfferSummary;
 public record OfferSummaryResponse(UUID id, String title, OfferCategory category, int priceMinor,
                                    int quantityTotal, int quantityReserved, int availableUnits,
                                    Instant pickupStart, Instant pickupEnd, OfferStatus status,
-                                   Instant createdAt, long version) {
+                                   Instant createdAt, long version, String imageUrl) {
     public static OfferSummaryResponse from(OfferSummary o) {
         return new OfferSummaryResponse(o.id(), o.title(), o.category(), o.priceMinor(), o.quantityTotal(),
-                o.quantityReserved(), o.availableUnits(), o.pickupStart(), o.pickupEnd(), o.status(), o.createdAt(), o.version());
+                o.quantityReserved(), o.availableUnits(), o.pickupStart(), o.pickupEnd(), o.status(), o.createdAt(), o.version(), o.imageUrl());
     }
 }
