@@ -93,8 +93,8 @@ paths:
                 reference: { type: string, maxLength: 40 }
                 pickupCode: { type: string, maxLength: 12 }
       responses:
-        "200": { description: Reservation collected and all active QR credentials invalidated. }
-        "404": { description: Invalid, already-used, expired, or wrong-merchant credential. }
+        "200": { description: Reservation collected or returned as EXPIRED when the pickup window has elapsed; active QR credentials are invalidated. }
+        "404": { description: Invalid, already-used, or wrong-merchant credential. }
         "409": { description: Reservation is not collectible in its current state. }
   /reservations/{reference}/cancel:
     patch:

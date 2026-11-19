@@ -139,7 +139,12 @@ public class ReservationService {
         Instant now = clock.instant();
         Reservation reservation = reservations.findByReferenceForUpdate(reference).orElseThrow(ReservationNotFoundException::new);
         if (!reservation.customerId().equals(customerId)) throw new ReservationNotFoundException();
-        ReservationCancellationReason reason = ReservationCancellationReason.parse(request == null ? null : request.reasonCode());
+        ReservationCancellationReason reason;
+        try {
+            reason = ReservationCancellationReason.parse(request == null ? null : request.reasonCode());
+        } catch (IllegalArgumentException invalidReason) {
+            throw new InvalidReservationRequestException("Unsupported cancellation reason.");
+        }
         String comment = request == null || request.comment() == null ? null : request.comment().trim();
         if (comment != null && comment.isEmpty()) comment = null;
         Reservation cancelled = reservation.cancel(now);
@@ -157,7 +162,6 @@ public class ReservationService {
         UUID merchantId = merchants.resolveActingMerchant(merchantUserId)
                 .orElseThrow(ReservationNotFoundException::new);
         Reservation reservation;
-        String tokenHash = null;
         if (request.qrPayload() != null && !request.qrPayload().isBlank()) {
             String payload = request.qrPayload().trim();
             if (!payload.startsWith(QR_PREFIX) || payload.length() > 100)
@@ -165,7 +169,7 @@ public class ReservationService {
             String token = payload.substring(QR_PREFIX.length());
             if (token.length() < 40 || token.length() > 60)
                 throw new InvalidReservationRequestException("The QR code is invalid.");
-            tokenHash = ReservationReferenceGenerator.hashPickupQrToken(token);
+            String tokenHash = ReservationReferenceGenerator.hashPickupQrToken(token);
             reservation = reservations.findByPickupCredentialHashForUpdate(tokenHash, now)
                     .orElseThrow(ReservationNotFoundException::new);
         } else {
@@ -184,8 +188,10 @@ public class ReservationService {
             throw new ReservationConflictException("The pickup window has not started yet.");
         if (!now.isBefore(reservation.pickupEnd())) {
             Reservation expired = reservation.expire(now);
-            reservations.updateStatus(expired, reservation.status());
-            throw new ReservationConflictException("The pickup window has expired.");
+            if (!reservations.updateStatus(expired, reservation.status()))
+                throw new ReservationConflictException("The reservation changed while it was being expired.");
+            reservations.markPickupCredentialsUsed(reservation.id(), now);
+            return ReservationResponse.from(expired, locale, now);
         }
         Reservation completed = reservation.complete(now);
         if (!reservations.updateStatus(completed, reservation.status()))
