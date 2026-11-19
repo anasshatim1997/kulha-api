@@ -143,7 +143,7 @@ public record Offer(
         if (!fieldErrors.isEmpty()) throw new InvalidOfferWindowException(fieldErrors);
         return new Offer(id, merchantId, title, description, category, priceMinor, originalPriceMinor,
                 quantityTotal, quantityReserved, reservationStartedAt, pickupStart, pickupEnd, allergensStatus, allergens,
-                foodNotes, OfferStatus.PUBLISHED, now, version + 1, createdAt, now);
+                foodNotes, OfferStatus.PUBLISHED, now, version + 1, createdAt, now, imageUrl);
     }
 
     public Offer unpublish(Instant now) {
@@ -199,7 +199,7 @@ public record Offer(
     private Offer copy(OfferStatus nextStatus, Instant nextPublishedAt, int total, int reserved, long nextVersion, Instant now) {
         return new Offer(id, merchantId, title, description, category, priceMinor, originalPriceMinor,
                 total, reserved, reservationStartedAt, pickupStart, pickupEnd, allergensStatus, allergens, foodNotes,
-                nextStatus, nextPublishedAt, nextVersion, createdAt, now);
+                nextStatus, nextPublishedAt, nextVersion, createdAt, now, imageUrl);
     }
 
     private static String validateImageUrl(String value) {
