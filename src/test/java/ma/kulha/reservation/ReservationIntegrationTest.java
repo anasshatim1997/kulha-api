@@ -21,11 +21,11 @@ class ReservationIntegrationTest extends AbstractApiIntegrationTest {
         MockHttpServletResponse response = create(tokenFor(customer), fixture, 2);
 
         assertThat(response.getStatus()).isEqualTo(201);
-        assertThat(response.getContentAsString()).contains("\\"status\\":\\"CONFIRMED\\"")
-                .contains("\\"offerTitle\\":\\"Test basket\\"")
-                .contains("\\"totalPriceMinor\\":8000")
-                .contains("\\"merchantName\\":\\"Test shop\\"")
-                .contains("\\"pickupCode\\"");
+        assertThat(response.getContentAsString()).contains("\"status\":\"CONFIRMED\"")
+                .contains("\"offerTitle\":\"Test basket\"")
+                .contains("\"totalPriceMinor\":8000")
+                .contains("\"merchantName\":\"Test shop\"")
+                .contains("\"pickupCode\"");
         assertThat(jdbc.sql("SELECT quantity_reserved FROM offer.offers WHERE id=:id")
                 .param("id", fixture.offerId()).query(Integer.class).single()).isEqualTo(2);
     }
@@ -101,7 +101,7 @@ class ReservationIntegrationTest extends AbstractApiIntegrationTest {
                 .header("Authorization", "Bearer " + token)).andReturn().getResponse();
 
         assertThat(response.getStatus()).isEqualTo(200);
-        assertThat(response.getContentAsString()).contains("\\"status\\":\\"CANCELLED\\"");
+        assertThat(response.getContentAsString()).contains("\"status\":\"CANCELLED\"");
         assertThat(jdbc.sql("SELECT quantity_reserved FROM offer.offers WHERE id=:id")
                 .param("id", fixture.offerId()).query(Integer.class).single()).isZero();
     }

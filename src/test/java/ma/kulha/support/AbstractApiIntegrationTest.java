@@ -65,8 +65,10 @@ public abstract class AbstractApiIntegrationTest {
     }
 
     protected String tokenFor(User user) throws Exception {
-        MockHttpServletResponse response = doPost("/api/v1/auth/login",
-                "{\\"email\\":\\"%s\\",\\"password\\":\\"%s\\"}".formatted(user.email(), PASSWORD), null);
+        String body = """
+                {"email":"%s","password":"%s"}
+                """.formatted(user.email(), PASSWORD);
+        MockHttpServletResponse response = doPost("/api/v1/auth/login", body, null);
         return field(response, "accessToken");
     }
 
@@ -97,8 +99,8 @@ public abstract class AbstractApiIntegrationTest {
 
     protected static String profileJson(String name) {
         return """
-                {"name":"%s","businessType":"BAKERY","address":"12 rue des Fleurs","city":"Casablanca",\
-                "phone":"+212600000000","openingHours":"Lun-Sam 7h-20h"}
+                {"name":"%s","businessType":"BAKERY","address":"12 rue des Fleurs","city":"Casablanca",
+                 "phone":"+212600000000","openingHours":"Lun-Sam 7h-20h"}
                 """.formatted(name);
     }
 
@@ -116,7 +118,7 @@ public abstract class AbstractApiIntegrationTest {
 
     protected static String field(MockHttpServletResponse response, String name) throws Exception {
         String body = response.getContentAsString();
-        Matcher matcher = Pattern.compile("\\"" + name + "\\"\\s*:\\s*\\"([^\\"]*)\\"").matcher(body);
+        Matcher matcher = Pattern.compile("\"" + Pattern.quote(name) + "\"\\s*:\\s*\"([^\"]*)\"").matcher(body);
         assertThat(matcher.find()).as("field '%s' in response: %s", name, body).isTrue();
         return matcher.group(1);
     }
