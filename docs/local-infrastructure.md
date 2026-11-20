@@ -23,4 +23,14 @@ The local RabbitMQ defaults are `kulha` / `kulha-local`. Override them with `RAB
 
 The application accepts `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`, and `REDIS_PASSWORD`.
 
-This change provisions the services and the durable outbox table. It does not yet switch existing email sends to asynchronous delivery; that is the next implementation slice and must include publisher confirms, idempotent consumers, bounded retries and dead-letter handling before being relied on for production.
+## Notification processing
+
+Business transactions write notification and email requests to `notification.outbox_events`. A scheduled relay publishes due events to the durable `kulha.events` exchange and marks them published only after a broker publisher confirmation. Unroutable events and negative acknowledgements are retried with bounded exponential backoff; events that exhaust the retry budget are marked dead-lettered in PostgreSQL.
+
+- `kulha.notifications`: idempotently persists in-app inbox records.
+- `kulha.emails`: sends transactional email with up to three SMTP attempts.
+- `kulha.emails.dead` and `kulha.notifications.dead`: durable dead-letter queues for consumer failures.
+
+Reservation confirmation, cancellation, collection and opted-in pickup reminders create in-app events. Reservation emails are added to the outbox only when the user's email and category preferences allow them. Account verification, password reset and merchant-decision emails also use the email outbox and are not suppressed by optional notification preferences.
+
+The test profile intentionally uses the in-memory rate limiter and disables scheduled RabbitMQ consumers so integration tests do not require Redis or RabbitMQ. Local development uses Redis and RabbitMQ from this Compose file. Production still needs monitored dead-letter operations and SMTP/provider delivery monitoring before launch.
