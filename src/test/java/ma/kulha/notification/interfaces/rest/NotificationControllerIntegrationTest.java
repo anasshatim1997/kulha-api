@@ -43,6 +43,7 @@ class NotificationControllerIntegrationTest {
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
+        jdbc.sql("DELETE FROM notification.outbox_events").update();
         jdbc.sql("DELETE FROM identity.users").update();
         owner = createUser("notifications-owner@example.com");
         other = createUser("notifications-other@example.com");
@@ -74,7 +75,7 @@ class NotificationControllerIntegrationTest {
                 .andExpect(status().isOk());
 
         assertThat(jdbc.sql("SELECT read_at FROM notification.notifications WHERE id = :id")
-                .param("id", notificationId).query(java.time.OffsetDateTime.class).single()).isNull();
+                .param("id", notificationId).query((rs, row) -> rs.getObject("read_at", java.time.OffsetDateTime.class)).single()).isNull();
 
         mvc.perform(patch("/api/v1/notifications/{id}/read", notificationId)
                         .with(jwt().jwt(token -> token.subject(owner.id().toString()))))
@@ -96,9 +97,9 @@ class NotificationControllerIntegrationTest {
                 .andExpect(status().isOk());
 
         assertThat(jdbc.sql("SELECT read_at FROM notification.notifications WHERE id = :id")
-                .param("id", ownId).query(java.time.OffsetDateTime.class).single()).isNotNull();
+                .param("id", ownId).query((rs, row) -> rs.getObject("read_at", java.time.OffsetDateTime.class)).single()).isNotNull();
         assertThat(jdbc.sql("SELECT read_at FROM notification.notifications WHERE id = :id")
-                .param("id", otherId).query(java.time.OffsetDateTime.class).single()).isNull();
+                .param("id", otherId).query((rs, row) -> rs.getObject("read_at", java.time.OffsetDateTime.class)).single()).isNull();
     }
 
     @Test
