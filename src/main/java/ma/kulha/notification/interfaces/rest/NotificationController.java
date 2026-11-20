@@ -1,6 +1,7 @@
 package ma.kulha.notification.interfaces.rest;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertFalse;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -221,5 +222,5 @@ public class NotificationController {
             @NotNull Boolean nearbyBaskets,
             @Min(15) @Max(1440) int reminderMinutesBefore,
             @NotNull Boolean emailEnabled,
-            @NotNull Boolean smsEnabled) {}
+            @NotNull @AssertFalse Boolean smsEnabled) {}
 }
