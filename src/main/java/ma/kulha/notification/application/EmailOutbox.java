@@ -1,6 +1,6 @@
 package ma.kulha.notification.application;
 
-import com.fasterxml.jackson.core.JacksonException;
+import tools.jackson.core.JacksonException;
 import java.time.Instant;
 import java.util.UUID;
 import ma.kulha.notification.domain.EmailDeliveryEvent;
