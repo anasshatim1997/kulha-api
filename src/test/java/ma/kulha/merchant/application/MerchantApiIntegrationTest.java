@@ -57,4 +57,34 @@ class MerchantApiIntegrationTest extends AbstractApiIntegrationTest {
         assertThat(merchantApi.findMerchantIdByOwner(owner.id())).contains(merchant.id());
         assertThat(merchantApi.isApproved(UUID.randomUUID())).isFalse();
     }
+    @Test
+    void merchantStaffResolvesOnlyTheMerchantTheyAreAssignedTo() {
+        User owner = createUser("staff-owner@example.com", true);
+        User admin = createUser("staff-admin@example.com", true, Role.ADMIN);
+        User staff = createUser("pickup-staff@example.com", true);
+        User otherOwner = createUser("other-merchant-owner@example.com", true);
+        Merchant merchant = merchantService.apply(owner.id(), profile());
+        merchantService.approve(admin.id(), merchant.id());
+        Merchant otherMerchant = merchantService.apply(otherOwner.id(),
+                new Merchant.Profile("Cafe Atlas", BusinessType.BAKERY, "45 avenue Hassan II",
+                        "Casablanca", "+212600000001", "Lun-Dim 8h-22h"));
+        merchantService.approve(admin.id(), otherMerchant.id());
+
+        jdbc.sql("""
+                INSERT INTO merchant.merchant_memberships
+                    (id, merchant_id, user_id, membership_role, status, invited_by)
+                VALUES (:id, :merchantId, :userId, 'PICKUP_STAFF', 'ACTIVE', :ownerId)
+                """)
+                .param("id", UUID.randomUUID())
+                .param("merchantId", merchant.id())
+                .param("userId", staff.id())
+                .param("ownerId", owner.id())
+                .update();
+        users.addRole(staff.id(), Role.MERCHANT_STAFF);
+
+        assertThat(merchantApi.resolveActingMerchant(staff.id())).contains(merchant.id())
+                .doesNotContain(otherMerchant.id());
+        assertThat(merchantApi.resolveActingMerchant(UUID.randomUUID())).isEmpty();
+    }
+
 }
