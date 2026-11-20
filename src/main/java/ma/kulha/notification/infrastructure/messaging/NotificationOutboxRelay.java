@@ -58,7 +58,8 @@ class NotificationOutboxRelay {
                 }
                 jdbc.sql("""
                         UPDATE notification.outbox_events
-                        SET published_at = now(), attempt_count = attempt_count + 1, last_error = NULL
+                        SET published_at = now(), attempt_count = attempt_count + 1, last_error = NULL,
+                            payload = CASE WHEN event_type = 'email.requested' THEN '{}'::jsonb ELSE payload END
                         WHERE id = :id
                         """).param("id", row.id()).update();
             } catch (Exception failure) {
