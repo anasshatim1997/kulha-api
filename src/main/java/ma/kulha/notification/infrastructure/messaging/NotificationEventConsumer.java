@@ -1,6 +1,6 @@
 package ma.kulha.notification.infrastructure.messaging;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import java.util.UUID;
 import ma.kulha.notification.domain.NotificationEvent;
 import org.slf4j.Logger;
