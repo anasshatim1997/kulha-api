@@ -15,6 +15,8 @@ public interface MerchantRepository {
     Optional<Merchant> findById(UUID id);
 
     Optional<Merchant> findByOwner(UUID ownerUserId);
+
+    Optional<Merchant> findByMember(UUID userId);
     void lockForOfferMutation(UUID merchantId);
 
     /**
