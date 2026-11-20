@@ -29,7 +29,7 @@ class MerchantApiService implements MerchantApi {
 
     @Override
     public Optional<UUID> resolveActingMerchant(UUID userId) {
-        return merchants.findByOwner(userId).map(Merchant::id);
+        return merchants.findByOwner(userId).or(() -> merchants.findByMember(userId)).map(Merchant::id);
     }
 
     @Override
