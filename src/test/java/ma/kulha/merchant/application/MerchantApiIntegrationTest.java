@@ -82,8 +82,9 @@ class MerchantApiIntegrationTest extends AbstractApiIntegrationTest {
                 .update();
         users.addRole(staff.id(), Role.MERCHANT_STAFF);
 
-        assertThat(merchantApi.resolveActingMerchant(staff.id())).contains(merchant.id())
-                .doesNotContain(otherMerchant.id());
+        var actingMerchant = merchantApi.resolveActingMerchant(staff.id());
+        assertThat(actingMerchant).contains(merchant.id());
+        assertThat(actingMerchant).isNotEqualTo(java.util.Optional.of(otherMerchant.id()));
         assertThat(merchantApi.resolveActingMerchant(UUID.randomUUID())).isEmpty();
     }
 
