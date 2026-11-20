@@ -7,7 +7,7 @@ import ma.kulha.identity.domain.model.Role;
 import ma.kulha.identity.domain.model.User;
 import ma.kulha.identity.domain.model.UserStatus;
 import ma.kulha.identity.domain.repository.UserRepository;
-import ma.kulha.merchant.domain.repository.MerchantRepository;
+import ma.kulha.merchant.application.MerchantApi;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -18,10 +18,10 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class MerchantStaffService {
     private final JdbcClient jdbc;
-    private final MerchantRepository merchants;
+    private final MerchantApi merchants;
     private final UserRepository users;
 
-    MerchantStaffService(JdbcClient jdbc, MerchantRepository merchants, UserRepository users) {
+    MerchantStaffService(JdbcClient jdbc, MerchantApi merchants, UserRepository users) {
         this.jdbc = jdbc;
         this.merchants = merchants;
         this.users = users;
@@ -102,8 +102,12 @@ public class MerchantStaffService {
     }
 
     private UUID ownerMerchant(UUID ownerUserId) {
-        return merchants.findByOwner(ownerUserId).map(ma.kulha.merchant.domain.model.Merchant::id)
+        UUID merchantId = merchants.findMerchantIdByOwner(ownerUserId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Merchant owner access required."));
+        if (!merchants.isApproved(merchantId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only approved merchants can manage staff.");
+        }
+        return merchantId;
     }
 
     public record StaffMember(UUID userId, String email, String fullName, String role, Instant addedAt) {}
