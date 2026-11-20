@@ -74,8 +74,8 @@ class NotificationControllerIntegrationTest {
                         .with(jwt().jwt(token -> token.subject(other.id().toString()))))
                 .andExpect(status().isOk());
 
-        assertThat(jdbc.sql("SELECT read_at FROM notification.notifications WHERE id = :id")
-                .param("id", notificationId).query((rs, row) -> rs.getObject("read_at", java.time.OffsetDateTime.class)).single()).isNull();
+        assertThat(jdbc.sql("SELECT read_at IS NOT NULL FROM notification.notifications WHERE id = :id")
+                .param("id", notificationId).query(Boolean.class).single()).isFalse();
 
         mvc.perform(patch("/api/v1/notifications/{id}/read", notificationId)
                         .with(jwt().jwt(token -> token.subject(owner.id().toString()))))
@@ -96,10 +96,10 @@ class NotificationControllerIntegrationTest {
                         .with(jwt().jwt(token -> token.subject(owner.id().toString()))))
                 .andExpect(status().isOk());
 
-        assertThat(jdbc.sql("SELECT read_at FROM notification.notifications WHERE id = :id")
-                .param("id", ownId).query((rs, row) -> rs.getObject("read_at", java.time.OffsetDateTime.class)).single()).isNotNull();
-        assertThat(jdbc.sql("SELECT read_at FROM notification.notifications WHERE id = :id")
-                .param("id", otherId).query((rs, row) -> rs.getObject("read_at", java.time.OffsetDateTime.class)).single()).isNull();
+        assertThat(jdbc.sql("SELECT read_at IS NOT NULL FROM notification.notifications WHERE id = :id")
+                .param("id", ownId).query(Boolean.class).single()).isTrue();
+        assertThat(jdbc.sql("SELECT read_at IS NOT NULL FROM notification.notifications WHERE id = :id")
+                .param("id", otherId).query(Boolean.class).single()).isFalse();
     }
 
     @Test
