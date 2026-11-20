@@ -37,8 +37,8 @@ class RedisRateLimiter implements RateLimiter {
                 Long.toString(windowMillis));
         long safeCount = Objects.requireNonNull(count, "Redis rate-limit script returned no counter");
         if (safeCount <= maxRequests) return RateLimitResult.permitted();
-        Long ttlMillis = redis.getExpire("kulha:rate-limit:" + key);
-        long retryAfter = ttlMillis == null || ttlMillis < 0 ? 1 : (ttlMillis + 999) / 1000;
+        Long ttlSeconds = redis.getExpire("kulha:rate-limit:" + key);
+        long retryAfter = ttlSeconds == null || ttlSeconds < 0 ? 1 : Math.max(1, ttlSeconds);
         return RateLimitResult.denied(retryAfter);
     }
 }
