@@ -3,10 +3,7 @@ package ma.kulha.merchant.application;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import ma.kulha.identity.domain.model.Role;
-import ma.kulha.identity.domain.model.User;
-import ma.kulha.identity.domain.model.UserStatus;
-import ma.kulha.identity.domain.repository.UserRepository;
+import ma.kulha.shared.identity.UserAccountDirectory;
 import ma.kulha.merchant.application.MerchantApi;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -19,9 +16,9 @@ import org.springframework.web.server.ResponseStatusException;
 public class MerchantStaffService {
     private final JdbcClient jdbc;
     private final MerchantApi merchants;
-    private final UserRepository users;
+    private final UserAccountDirectory users;
 
-    MerchantStaffService(JdbcClient jdbc, MerchantApi merchants, UserRepository users) {
+    MerchantStaffService(JdbcClient jdbc, MerchantApi merchants, UserAccountDirectory users) {
         this.jdbc = jdbc;
         this.merchants = merchants;
         this.users = users;
@@ -49,13 +46,16 @@ public class MerchantStaffService {
     @Transactional
     public StaffMember addPickupStaff(UUID ownerUserId, String email) {
         UUID merchantId = ownerMerchant(ownerUserId);
-        User staff = users.findByEmail(User.normalizeEmail(email))
+        UserAccountDirectory.Account staff = users.findAccountByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "KULHA account not found."));
         if (staff.id().equals(ownerUserId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "The merchant owner is already a member.");
         }
-        if (staff.status() != UserStatus.ACTIVE || !staff.isEmailVerified()) {
+        if (!staff.active() || !staff.emailVerified()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Staff accounts must be active and email-verified.");
+        }
+        if (staff.merchantOwner() || staff.administrator()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Owner and administrator accounts cannot be assigned as pickup staff.");
         }
         try {
             jdbc.sql("""
@@ -74,7 +74,7 @@ public class MerchantStaffService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "This account already has an active merchant staff assignment.", conflict);
         }
-        users.addRole(staff.id(), Role.MERCHANT_STAFF);
+        users.grantPickupStaff(staff.id());
         return new StaffMember(staff.id(), staff.email(), staff.fullName(), "PICKUP_STAFF", Instant.now());
     }
 
@@ -98,7 +98,7 @@ public class MerchantStaffService {
                 """)
                 .param("userId", staffUserId)
                 .query(Boolean.class).single();
-        if (!hasAnotherActiveMembership) users.removeRole(staffUserId, Role.MERCHANT_STAFF);
+        if (!hasAnotherActiveMembership) users.revokePickupStaff(staffUserId);
     }
 
     private UUID ownerMerchant(UUID ownerUserId) {
