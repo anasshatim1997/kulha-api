@@ -4,6 +4,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -154,6 +156,45 @@ public class NotificationController {
         return request;
     }
 
+
+    @GetMapping("/api/v1/me/preferences")
+    @Transactional
+    UserPreferences userPreferences(Authentication authentication) {
+        UUID userId = userId(authentication);
+        jdbc.sql("INSERT INTO identity.user_preferences (user_id) VALUES (:userId) ON CONFLICT (user_id) DO NOTHING")
+                .param("userId", userId).update();
+        return jdbc.sql("""
+                SELECT preferred_city, preferred_district, locale
+                FROM identity.user_preferences WHERE user_id = :userId
+                """)
+                .param("userId", userId)
+                .query((rs, row) -> new UserPreferences(
+                        rs.getString("preferred_city"), rs.getString("preferred_district"), rs.getString("locale")))
+                .single();
+    }
+
+    @PutMapping("/api/v1/me/preferences")
+    @Transactional
+    UserPreferences updateUserPreferences(@Valid @RequestBody UserPreferences request,
+                                          Authentication authentication) {
+        UUID userId = userId(authentication);
+        jdbc.sql("""
+                INSERT INTO identity.user_preferences (user_id, preferred_city, preferred_district, locale, updated_at)
+                VALUES (:userId, :city, :district, :locale, now())
+                ON CONFLICT (user_id) DO UPDATE SET
+                    preferred_city = EXCLUDED.preferred_city,
+                    preferred_district = EXCLUDED.preferred_district,
+                    locale = EXCLUDED.locale,
+                    updated_at = now()
+                """)
+                .param("userId", userId)
+                .param("city", request.preferredCity())
+                .param("district", request.preferredDistrict())
+                .param("locale", request.locale())
+                .update();
+        return request;
+    }
+
     private void ensurePreferences(UUID userId) {
         jdbc.sql("""
                 INSERT INTO notification.notification_preferences (user_id)
@@ -165,6 +206,9 @@ public class NotificationController {
         return UUID.fromString(authentication.getName());
     }
 
+    public record UserPreferences(@Size(max = 80) String preferredCity,
+                                  @Size(max = 100) String preferredDistrict,
+                                  @NotNull @Pattern(regexp = "fr|en|ar") String locale) {}
     public record NotificationItem(UUID id, String type, String title, String message,
                                    String actionLabel, String actionUrl, Instant createdAt, Instant readAt) {}
     public record UnreadCount(long count) {}
