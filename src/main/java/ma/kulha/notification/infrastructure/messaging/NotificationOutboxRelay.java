@@ -68,7 +68,8 @@ class NotificationOutboxRelay {
                 if (attempts >= MAX_ATTEMPTS) {
                     jdbc.sql("""
                             UPDATE notification.outbox_events
-                            SET attempt_count = :attempts, dead_lettered_at = now(), last_error = :error
+                            SET attempt_count = :attempts, dead_lettered_at = now(), last_error = :error,
+                                payload = CASE WHEN event_type = 'email.requested' THEN '{}'::jsonb ELSE payload END
                             WHERE id = :id
                             """).param("attempts", attempts).param("error", message).param("id", row.id()).update();
                     log.error("Outbox event {} moved to dead letter after {} attempts ({})",
