@@ -37,8 +37,8 @@ class NotificationOutboxRelay {
                 FROM notification.outbox_events
                 WHERE published_at IS NULL AND dead_lettered_at IS NULL AND available_at <= now()
                 ORDER BY occurred_at
-                FOR UPDATE SKIP LOCKED
                 LIMIT :batchSize
+                FOR UPDATE SKIP LOCKED
                 """)
                 .param("batchSize", BATCH_SIZE)
                 .query((rs, row) -> new OutboxRow(
