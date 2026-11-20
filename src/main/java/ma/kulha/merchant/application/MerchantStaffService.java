@@ -27,20 +27,22 @@ public class MerchantStaffService {
     @Transactional(readOnly = true)
     public List<StaffMember> list(UUID ownerUserId) {
         UUID merchantId = ownerMerchant(ownerUserId);
-        return jdbc.sql("""
-                SELECT membership.user_id, users.email, users.full_name,
-                       membership.membership_role, membership.created_at
-                FROM merchant.merchant_memberships membership
-                JOIN identity.users users ON users.id = membership.user_id
-                WHERE membership.merchant_id = :merchantId AND membership.status = 'ACTIVE'
-                ORDER BY membership.created_at, membership.user_id
+        List<MembershipRow> memberships = jdbc.sql("""
+                SELECT user_id, membership_role, created_at
+                FROM merchant.merchant_memberships
+                WHERE merchant_id = :merchantId AND status = 'ACTIVE'
+                ORDER BY created_at, user_id
                 """)
                 .param("merchantId", merchantId)
-                .query((rs, row) -> new StaffMember(
-                        rs.getObject("user_id", UUID.class), rs.getString("email"), rs.getString("full_name"),
-                        rs.getString("membership_role"),
+                .query((rs, row) -> new MembershipRow(
+                        rs.getObject("user_id", UUID.class), rs.getString("membership_role"),
                         rs.getObject("created_at", java.time.OffsetDateTime.class).toInstant()))
                 .list();
+        return memberships.stream()
+                .flatMap(membership -> users.findAccountById(membership.userId()).stream()
+                        .map(account -> new StaffMember(account.id(), account.email(), account.fullName(),
+                                membership.role(), membership.addedAt())))
+                .toList();
     }
 
     @Transactional
@@ -110,5 +112,6 @@ public class MerchantStaffService {
         return merchantId;
     }
 
+    private record MembershipRow(UUID userId, String role, Instant addedAt) {}
     public record StaffMember(UUID userId, String email, String fullName, String role, Instant addedAt) {}
 }
