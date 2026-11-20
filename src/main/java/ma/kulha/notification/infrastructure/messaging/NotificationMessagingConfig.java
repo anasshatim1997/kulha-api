@@ -10,6 +10,7 @@ import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @Configuration
@@ -59,23 +60,27 @@ class NotificationMessagingConfig {
     }
 
     @Bean
-    Binding notificationsBinding(Queue notificationsQueue, DirectExchange kulhaEventsExchange) {
+    Binding notificationsBinding(@Qualifier("notificationsQueue") Queue notificationsQueue,
+                                @Qualifier("kulhaEventsExchange") DirectExchange kulhaEventsExchange) {
         return BindingBuilder.bind(notificationsQueue).to(kulhaEventsExchange).with(NOTIFICATION_ROUTING_KEY);
     }
 
     @Bean
-    Binding emailsBinding(Queue emailsQueue, DirectExchange kulhaEventsExchange) {
+    Binding emailsBinding(@Qualifier("emailsQueue") Queue emailsQueue,
+                          @Qualifier("kulhaEventsExchange") DirectExchange kulhaEventsExchange) {
         return BindingBuilder.bind(emailsQueue).to(kulhaEventsExchange).with(EMAIL_ROUTING_KEY);
     }
 
     @Bean
-    Binding emailDeadLetterBinding(Queue emailDeadLetterQueue, DirectExchange kulhaDeadLetterExchange) {
+    Binding emailDeadLetterBinding(@Qualifier("emailDeadLetterQueue") Queue emailDeadLetterQueue,
+                                   @Qualifier("kulhaDeadLetterExchange") DirectExchange kulhaDeadLetterExchange) {
         return BindingBuilder.bind(emailDeadLetterQueue).to(kulhaDeadLetterExchange)
                 .with(EMAIL_DEAD_LETTER_ROUTING_KEY);
     }
 
     @Bean
-    Binding notificationDeadLetterBinding(Queue notificationDeadLetterQueue, DirectExchange kulhaDeadLetterExchange) {
+    Binding notificationDeadLetterBinding(@Qualifier("notificationDeadLetterQueue") Queue notificationDeadLetterQueue,
+                                          @Qualifier("kulhaDeadLetterExchange") DirectExchange kulhaDeadLetterExchange) {
         return BindingBuilder.bind(notificationDeadLetterQueue).to(kulhaDeadLetterExchange)
                 .with("notification.dead");
     }
