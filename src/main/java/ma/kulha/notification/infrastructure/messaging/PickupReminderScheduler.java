@@ -52,14 +52,12 @@ class PickupReminderScheduler {
                 .list();
 
         for (DueReminder reminder : due) {
-            UUID notificationId = UUID.randomUUID();
             int inserted = jdbc.sql("""
-                    INSERT INTO notification.pickup_reminder_dispatches (reservation_id, notification_id)
-                    VALUES (:reservationId, :notificationId)
+                    INSERT INTO notification.pickup_reminder_dispatches (reservation_id)
+                    VALUES (:reservationId)
                     ON CONFLICT (reservation_id) DO NOTHING
                     """)
                     .param("reservationId", reminder.reservationId())
-                    .param("notificationId", notificationId)
                     .update();
             if (inserted == 0) continue;
             Locale locale = Locale.forLanguageTag(reminder.locale());
