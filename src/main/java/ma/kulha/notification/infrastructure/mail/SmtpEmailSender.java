@@ -39,6 +39,7 @@ class SmtpEmailSender implements EmailSender {
         } catch (MailException | MessagingException e) {
             // Never log either body: transactional emails can contain one-time credentials.
             log.error("Email delivery failed (subject: {}): {}", subject, e.getClass().getSimpleName());
+            throw new IllegalStateException("Email delivery failed", e);
         }
     }
 }
