@@ -5,9 +5,11 @@ import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Profile;
 
 /** Fixed-window counters in memory. Simple and safe for one instance; not shared between instances. */
 @Component
+@Profile("test")
 class InMemoryRateLimiter implements RateLimiter {
 
     private static final int CLEANUP_THRESHOLD = 10_000;
