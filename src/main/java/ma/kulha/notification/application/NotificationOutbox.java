@@ -1,7 +1,7 @@
 package ma.kulha.notification.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -39,7 +39,7 @@ public class NotificationOutbox {
                     .param("payload", payload)
                     .update();
             return eventId;
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Could not serialize notification event", exception);
         }
     }
