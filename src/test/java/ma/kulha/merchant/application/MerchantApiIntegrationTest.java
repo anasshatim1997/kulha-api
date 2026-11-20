@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.UUID;
 import ma.kulha.identity.domain.model.Role;
 import ma.kulha.identity.domain.model.User;
+import ma.kulha.identity.domain.repository.UserRepository;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import ma.kulha.merchant.domain.model.BusinessType;
 import ma.kulha.merchant.domain.model.Merchant;
 import ma.kulha.support.AbstractApiIntegrationTest;
@@ -18,6 +20,12 @@ class MerchantApiIntegrationTest extends AbstractApiIntegrationTest {
 
     @Autowired
     MerchantService merchantService;
+
+    @Autowired
+    UserRepository users;
+
+    @Autowired
+    JdbcClient jdbc;
 
     private static Merchant.Profile profile() {
         return new Merchant.Profile("Boulangerie Atlas", BusinessType.BAKERY, "12 rue des Fleurs",
