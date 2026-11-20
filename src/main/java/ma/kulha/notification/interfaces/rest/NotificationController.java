@@ -41,7 +41,8 @@ public class NotificationController {
             Authentication authentication) {
         UUID userId = userId(authentication);
         String sql = """
-                SELECT id, type, title, message, action_label, action_url, created_at, read_at
+                SELECT id, type, title, message, action_label, action_url, created_at, read_at,
+                       (created_at >= date_trunc('day', now())) AS is_today
                 FROM notification.notifications
                 WHERE user_id = :userId
                   AND (:unreadOnly = false OR read_at IS NULL)
@@ -59,7 +60,8 @@ public class NotificationController {
                         rs.getString("action_label"), rs.getString("action_url"),
                         rs.getObject("created_at", java.time.OffsetDateTime.class).toInstant(),
                         rs.getObject("read_at", java.time.OffsetDateTime.class) == null ? null
-                                : rs.getObject("read_at", java.time.OffsetDateTime.class).toInstant()))
+                                : rs.getObject("read_at", java.time.OffsetDateTime.class).toInstant(),
+                        rs.getBoolean("is_today")))
                 .list();
     }
 
@@ -210,7 +212,7 @@ public class NotificationController {
                                   @Size(max = 100) String preferredDistrict,
                                   @NotNull @Pattern(regexp = "fr|en|ar") String locale) {}
     public record NotificationItem(UUID id, String type, String title, String message,
-                                   String actionLabel, String actionUrl, Instant createdAt, Instant readAt) {}
+                                   String actionLabel, String actionUrl, Instant createdAt, Instant readAt, boolean isToday) {}
     public record UnreadCount(long count) {}
     public record NotificationPreferences(
             @NotNull Boolean reservationConfirmations,
