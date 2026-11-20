@@ -23,6 +23,7 @@ class NotificationMessagingConfig {
     static final String EMAIL_ROUTING_KEY = "email.requested";
     static final String DEAD_LETTER_EXCHANGE = "kulha.events.dlx";
     static final String EMAIL_DEAD_LETTER_QUEUE = "kulha.emails.dead";
+    static final String NOTIFICATION_DEAD_LETTER_QUEUE = "kulha.notifications.dead";
     static final String EMAIL_DEAD_LETTER_ROUTING_KEY = "email.dead";
 
     @Bean
@@ -53,6 +54,11 @@ class NotificationMessagingConfig {
     }
 
     @Bean
+    Queue notificationDeadLetterQueue() {
+        return QueueBuilder.durable(NOTIFICATION_DEAD_LETTER_QUEUE).build();
+    }
+
+    @Bean
     Binding notificationsBinding(Queue notificationsQueue, DirectExchange kulhaEventsExchange) {
         return BindingBuilder.bind(notificationsQueue).to(kulhaEventsExchange).with(NOTIFICATION_ROUTING_KEY);
     }
@@ -66,6 +72,12 @@ class NotificationMessagingConfig {
     Binding emailDeadLetterBinding(Queue emailDeadLetterQueue, DirectExchange kulhaDeadLetterExchange) {
         return BindingBuilder.bind(emailDeadLetterQueue).to(kulhaDeadLetterExchange)
                 .with(EMAIL_DEAD_LETTER_ROUTING_KEY);
+    }
+
+    @Bean
+    Binding notificationDeadLetterBinding(Queue notificationDeadLetterQueue, DirectExchange kulhaDeadLetterExchange) {
+        return BindingBuilder.bind(notificationDeadLetterQueue).to(kulhaDeadLetterExchange)
+                .with("notification.dead");
     }
 
     @Bean
