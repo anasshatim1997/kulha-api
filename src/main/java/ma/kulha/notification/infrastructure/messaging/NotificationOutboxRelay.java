@@ -53,6 +53,9 @@ class NotificationOutboxRelay {
                         row.eventType(), row.payload(), correlation);
                 CorrelationData.Confirm confirm = correlation.getFuture().get(5, TimeUnit.SECONDS);
                 if (!confirm.isAck()) throw new IllegalStateException("RabbitMQ negatively acknowledged event");
+                if (correlation.getReturned() != null) {
+                    throw new IllegalStateException("RabbitMQ returned an unroutable event");
+                }
                 jdbc.sql("""
                         UPDATE notification.outbox_events
                         SET published_at = now(), attempt_count = attempt_count + 1, last_error = NULL
