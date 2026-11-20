@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.UUID;
 import ma.kulha.identity.domain.model.User;
 import ma.kulha.identity.domain.repository.UserRepository;
+import ma.kulha.notification.application.NotificationOutbox;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +34,7 @@ class NotificationControllerIntegrationTest {
     @Autowired JdbcClient jdbc;
     @Autowired UserRepository users;
     @Autowired PasswordEncoder passwords;
+    @Autowired NotificationOutbox notificationOutbox;
 
     private MockMvc mvc;
     private User owner;
@@ -157,6 +159,45 @@ class NotificationControllerIntegrationTest {
     void notificationEndpointsRequireAuthentication() throws Exception {
         mvc.perform(get("/api/v1/notifications")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/v1/me/notification-preferences")).andExpect(status().isUnauthorized());
+    }
+
+
+    @Test
+    void reservationNotificationWritesInboxAndEmailEventsToTheTransactionalOutbox() {
+        notificationOutbox.enqueue(owner.id(), "RESERVATION_CONFIRMED", "Reservation confirmed",
+                "Your basket is booked.", "View reservation", "/reservations/TEST-REF");
+
+        assertThat(jdbc.sql("""
+                SELECT count(*) FROM notification.outbox_events
+                WHERE aggregate_id = :userId
+                  AND event_type = 'notification.created'
+                """).param("userId", owner.id()).query(Long.class).single()).isEqualTo(1);
+        assertThat(jdbc.sql("""
+                SELECT count(*) FROM notification.outbox_events
+                WHERE event_type = 'email.requested'
+                  AND payload ->> 'recipient' = :email
+                """).param("email", owner.email()).query(Long.class).single()).isEqualTo(1);
+    }
+
+    @Test
+    void disabledEmailPreferencesKeepInboxEventsButSuppressOptionalEmailEvents() {
+        jdbc.sql("""
+                INSERT INTO notification.notification_preferences (user_id, email_enabled)
+                VALUES (:userId, false)
+                """).param("userId", owner.id()).update();
+
+        notificationOutbox.enqueue(owner.id(), "PICKUP_REMINDER", "Pickup soon",
+                "Your basket is nearly ready.", "Show my code", "/reservations/TEST-REF");
+
+        assertThat(jdbc.sql("""
+                SELECT count(*) FROM notification.outbox_events
+                WHERE aggregate_id = :userId AND event_type = 'notification.created'
+                """).param("userId", owner.id()).query(Long.class).single()).isEqualTo(1);
+        assertThat(jdbc.sql("""
+                SELECT count(*) FROM notification.outbox_events
+                WHERE event_type = 'email.requested'
+                  AND payload ->> 'recipient' = :email
+                """).param("email", owner.email()).query(Long.class).single()).isZero();
     }
 
     private User createUser(String email) {
