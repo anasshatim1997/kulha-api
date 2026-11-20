@@ -32,6 +32,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/v1/offers/nearby").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/me").authenticated()
                 .requestMatchers(HttpMethod.PUT, "/api/v1/me").authenticated()
+                .requestMatchers("/api/v1/me/notification-preferences").authenticated()
+                .requestMatchers("/api/v1/notifications/**").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/v1/merchants/apply").authenticated()
                 .requestMatchers("/api/v1/merchants/me").authenticated()
                 .requestMatchers("/api/v1/merchants/me/offers", "/api/v1/merchants/me/offers/**").hasRole("MERCHANT")
