@@ -200,6 +200,19 @@ class NotificationControllerIntegrationTest {
                 """).param("email", owner.email()).query(Long.class).single()).isZero();
     }
 
+    @Test
+    void firstUserPreferencesVisitUsesTheCurrentLocaleAndKeepsTheSavedChoice() throws Exception {
+        mvc.perform(get("/api/v1/me/preferences?locale=ar")
+                        .with(jwt().jwt(token -> token.subject(owner.id().toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.locale").value("ar"));
+
+        mvc.perform(get("/api/v1/me/preferences?locale=en")
+                        .with(jwt().jwt(token -> token.subject(owner.id().toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.locale").value("ar"));
+    }
+
     private User createUser(String email) {
         User user = User.register(email, passwords.encode("a-long-enough-password"), "Test User", null, Instant.now());
         users.insert(user);
