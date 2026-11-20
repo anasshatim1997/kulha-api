@@ -29,10 +29,12 @@ class IdentityApiService implements IdentityApi {
     @Override
     public void grantMerchantRole(UUID userId) {
         users.addRole(userId, Role.MERCHANT);
+        users.addRole(userId, Role.MERCHANT_OWNER);
     }
 
     @Override
     public void revokeMerchantRole(UUID userId) {
         users.removeRole(userId, Role.MERCHANT);
+        users.removeRole(userId, Role.MERCHANT_OWNER);
     }
 }
