@@ -3,5 +3,11 @@ package ma.kulha.identity.domain.model;
 public enum Role {
     CUSTOMER,
     MERCHANT,
-    ADMIN
+    MERCHANT_OWNER,
+    MERCHANT_STAFF,
+    SUPPORT,
+    FINANCE,
+    MODERATOR,
+    ADMIN,
+    SUPER_ADMIN
 }
