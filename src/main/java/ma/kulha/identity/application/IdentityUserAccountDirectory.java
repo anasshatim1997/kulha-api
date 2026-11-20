@@ -19,11 +19,19 @@ public class IdentityUserAccountDirectory implements UserAccountDirectory {
 
     @Override
     public Optional<Account> findAccountByEmail(String email) {
-        return users.findByEmail(User.normalizeEmail(email)).map(user -> new Account(
-                user.id(), user.email(), user.fullName(),
+        return users.findByEmail(User.normalizeEmail(email)).map(this::toAccount);
+    }
+
+    @Override
+    public Optional<Account> findAccountById(UUID userId) {
+        return users.findById(userId).map(this::toAccount);
+    }
+
+    private Account toAccount(User user) {
+        return new Account(user.id(), user.email(), user.fullName(),
                 user.status() == UserStatus.ACTIVE, user.isEmailVerified(),
                 user.hasRole(Role.MERCHANT) || user.hasRole(Role.MERCHANT_OWNER),
-                user.hasRole(Role.ADMIN) || user.hasRole(Role.SUPER_ADMIN)));
+                user.hasRole(Role.ADMIN) || user.hasRole(Role.SUPER_ADMIN));
     }
 
     @Override
