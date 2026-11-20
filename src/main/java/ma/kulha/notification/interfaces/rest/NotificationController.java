@@ -162,10 +162,15 @@ public class NotificationController {
 
     @GetMapping("/api/v1/me/preferences")
     @Transactional
-    UserPreferences userPreferences(Authentication authentication) {
+    UserPreferences userPreferences(
+            @RequestParam(defaultValue = "fr") @Pattern(regexp = "fr|en|ar") String locale,
+            Authentication authentication) {
         UUID userId = userId(authentication);
-        jdbc.sql("INSERT INTO identity.user_preferences (user_id) VALUES (:userId) ON CONFLICT (user_id) DO NOTHING")
-                .param("userId", userId).update();
+        jdbc.sql("""
+                INSERT INTO identity.user_preferences (user_id, locale)
+                VALUES (:userId, :locale) ON CONFLICT (user_id) DO NOTHING
+                """)
+                .param("userId", userId).param("locale", locale).update();
         return jdbc.sql("""
                 SELECT preferred_city, preferred_district, locale
                 FROM identity.user_preferences WHERE user_id = :userId
