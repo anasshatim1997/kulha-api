@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS app.outbox_events (
+CREATE TABLE IF NOT EXISTS notification.outbox_events (
     id UUID PRIMARY KEY,
     aggregate_type VARCHAR(100) NOT NULL,
     aggregate_id UUID NOT NULL,
@@ -12,6 +12,6 @@ CREATE TABLE IF NOT EXISTS app.outbox_events (
     CONSTRAINT ck_outbox_attempt_count_nonnegative CHECK (attempt_count >= 0)
 );
 
-CREATE INDEX IF NOT EXISTS ix_outbox_events_pending
-    ON app.outbox_events (available_at, occurred_at)
+CREATE INDEX IF NOT EXISTS ix_notification_outbox_pending
+    ON notification.outbox_events (available_at, occurred_at)
     WHERE published_at IS NULL;
