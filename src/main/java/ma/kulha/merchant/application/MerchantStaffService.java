@@ -5,9 +5,10 @@ import java.util.List;
 import java.util.UUID;
 import ma.kulha.identity.domain.model.Role;
 import ma.kulha.identity.domain.model.User;
+import ma.kulha.identity.domain.model.UserStatus;
 import ma.kulha.identity.domain.repository.UserRepository;
 import ma.kulha.merchant.domain.repository.MerchantRepository;
-import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -53,6 +54,9 @@ public class MerchantStaffService {
         if (staff.id().equals(ownerUserId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "The merchant owner is already a member.");
         }
+        if (staff.status() != UserStatus.ACTIVE || !staff.isEmailVerified()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Staff accounts must be active and email-verified.");
+        }
         try {
             jdbc.sql("""
                     INSERT INTO merchant.merchant_memberships
@@ -66,7 +70,7 @@ public class MerchantStaffService {
                     .param("userId", staff.id())
                     .param("ownerId", ownerUserId)
                     .update();
-        } catch (DuplicateKeyException conflict) {
+        } catch (DataIntegrityViolationException conflict) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "This account already has an active merchant staff assignment.", conflict);
         }
