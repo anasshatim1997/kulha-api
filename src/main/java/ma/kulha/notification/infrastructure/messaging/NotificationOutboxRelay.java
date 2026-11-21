@@ -1,10 +1,8 @@
 package ma.kulha.notification.infrastructure.messaging;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import ma.kulha.notification.infrastructure.messaging.NotificationMessagingConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
@@ -52,7 +50,7 @@ class NotificationOutboxRelay {
                 rabbit.convertAndSend(NotificationMessagingConfig.NOTIFICATION_EXCHANGE,
                         row.eventType(), row.payload(), correlation);
                 CorrelationData.Confirm confirm = correlation.getFuture().get(5, TimeUnit.SECONDS);
-                if (!confirm.isAck()) throw new IllegalStateException("RabbitMQ negatively acknowledged event");
+                if (!confirm.ack()) throw new IllegalStateException("RabbitMQ negatively acknowledged event");
                 if (correlation.getReturned() != null) {
                     throw new IllegalStateException("RabbitMQ returned an unroutable event");
                 }
