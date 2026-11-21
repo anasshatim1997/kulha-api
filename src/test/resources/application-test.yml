@@ -9,6 +9,15 @@ spring:
   mail:
     host: localhost
     port: 1025
+  rabbitmq:
+    dynamic: false
+    listener:
+      simple:
+        auto-startup: false
+  data:
+    redis:
+      repositories:
+        enabled: false
 
 app:
   offer:

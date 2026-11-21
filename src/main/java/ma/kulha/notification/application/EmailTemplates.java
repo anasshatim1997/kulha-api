@@ -53,6 +53,14 @@ final class EmailTemplates {
         };
     }
 
+
+    static EmailMessage notification(String title, String message) {
+        String safeTitle = title == null || title.isBlank() ? "Mise à jour KULHA!" : title;
+        String safeMessage = message == null ? "" : message;
+        String text = "Bonjour,\\n\\n" + safeMessage + "\\n\\nL’équipe KULHA!\\nMoins de gaspillage, plus de goût.";
+        return new EmailMessage(safeTitle, text, layout(safeTitle, paragraph(safeMessage)));
+    }
+
     private static EmailMessage action(String subject, String heading, String intro, String buttonLabel,
                                        String link, String validity, String note) {
         String text = "Bonjour,\n\n" + intro + "\n\n" + buttonLabel

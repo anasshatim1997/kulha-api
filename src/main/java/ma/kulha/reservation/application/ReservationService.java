@@ -10,6 +10,7 @@ import java.util.UUID;
 import ma.kulha.merchant.application.MerchantApi;
 import ma.kulha.offer.application.OfferApi;
 import ma.kulha.offer.application.OfferSnapshot;
+import ma.kulha.notification.application.NotificationOutbox;
 import ma.kulha.reservation.domain.model.Reservation;
 import ma.kulha.reservation.domain.model.ReservationCancellationReason;
 import ma.kulha.reservation.domain.model.ReservationFilter;
@@ -32,13 +33,14 @@ public class ReservationService {
     private final OfferApi offers;
     private final MerchantApi merchants;
     private final ReservationReferenceGenerator references;
+    private final NotificationOutbox notificationOutbox;
     private final Clock clock;
     private final int maximumQuantity;
     ReservationService(ReservationRepository reservations, OfferApi offers, MerchantApi merchants,
-            ReservationReferenceGenerator references, Clock clock,
+            ReservationReferenceGenerator references, NotificationOutbox notificationOutbox, Clock clock,
             @Value("${app.reservation.max-quantity-per-customer:3}") int maximumQuantity) {
         this.reservations = reservations; this.offers = offers; this.merchants = merchants;
-        this.references = references; this.clock = clock;
+        this.references = references; this.notificationOutbox = notificationOutbox; this.clock = clock;
         if (maximumQuantity < 1 || maximumQuantity > 20)
             throw new IllegalArgumentException("app.reservation.max-quantity-per-customer must be 1..20");
         this.maximumQuantity = maximumQuantity;
@@ -100,6 +102,12 @@ public class ReservationService {
                 locked.pickupStart(), locked.pickupEnd(), pickupCode, request.quantity(), locked.priceMinor(), now);
         Reservation confirmed = pending.confirm(now);
         reservations.insert(confirmed);
+        notificationOutbox.enqueue(customerId, "RESERVATION_CONFIRMED",
+                localized(locale, "Réservation confirmée", "Reservation confirmed", "تم تأكيد الحجز"),
+                localized(locale, "Votre panier est réservé. Consultez votre créneau de retrait.",
+                        "Your basket is booked. Check your pickup window.", "تم حجز سلتك. تحقق من موعد الاستلام."),
+                localized(locale, "Voir la réservation", "View reservation", "عرض الحجز"),
+                "/reservations/" + confirmed.reference());
         String qrPayload = issuePickupCredential(confirmed, now);
         return ReservationResponse.from(confirmed, locale, now, qrPayload);
     }
@@ -153,6 +161,11 @@ public class ReservationService {
         reservations.recordCancellationEvent(reservation, reason.name(), comment, customerId, now);
         offers.releaseUnits(reservation.offerId(), reservation.quantity());
         reservations.markPickupCredentialsUsed(reservation.id(), now);
+        notificationOutbox.enqueue(customerId, "RESERVATION_CANCELLED",
+                localized(locale, "Réservation annulée", "Reservation cancelled", "تم إلغاء الحجز"),
+                localized(locale, "Votre réservation a été annulée.", "Your reservation has been cancelled.", "تم إلغاء حجزك."),
+                localized(locale, "Trouver un autre panier", "Find another basket", "ابحث عن سلة أخرى"),
+                "/offers");
         return ReservationResponse.from(cancelled, locale, now);
     }
     @Transactional
@@ -161,6 +174,7 @@ public class ReservationService {
         if (request == null) throw new InvalidReservationRequestException("A QR token or pickup code is required.");
         UUID merchantId = merchants.resolveActingMerchant(merchantUserId)
                 .orElseThrow(ReservationNotFoundException::new);
+        if (!merchants.isApproved(merchantId)) throw new ReservationNotFoundException();
         Reservation reservation;
         if (request.qrPayload() != null && !request.qrPayload().isBlank()) {
             String payload = request.qrPayload().trim();
@@ -191,14 +205,32 @@ public class ReservationService {
             if (!reservations.updateStatus(expired, reservation.status()))
                 throw new ReservationConflictException("The reservation changed while it was being expired.");
             reservations.markPickupCredentialsUsed(reservation.id(), now);
+            notificationOutbox.enqueue(reservation.customerId(), "RESERVATION_EXPIRED",
+                    localized(locale, "Réservation expirée", "Reservation expired", "انتهى الحجز"),
+                    localized(locale, "Le créneau de retrait est terminé.", "The pickup window has ended.", "انتهى موعد الاستلام."),
+                    localized(locale, "Découvrir les paniers", "Explore baskets", "استكشف السلال"),
+                    "/offers");
             return ReservationResponse.from(expired, locale, now);
         }
         Reservation completed = reservation.complete(now);
         if (!reservations.updateStatus(completed, reservation.status()))
             throw new ReservationConflictException("The reservation changed while it was being collected.");
         reservations.markPickupCredentialsUsed(reservation.id(), now);
+        notificationOutbox.enqueue(reservation.customerId(), "RESERVATION_COLLECTED",
+                localized(locale, "Panier récupéré", "Basket collected", "تم استلام السلة"),
+                localized(locale, "Votre retrait est confirmé. Merci de lutter contre le gaspillage !",
+                        "Your pickup is confirmed. Thanks for helping reduce food waste!", "تم تأكيد الاستلام. شكراً لمساهمتك في الحد من هدر الطعام!"),
+                null, null);
         return ReservationResponse.from(completed, locale, now);
     }
+    private static String localized(Locale locale, String french, String english, String arabic) {
+        return switch (locale == null ? "fr" : locale.getLanguage()) {
+            case "en" -> english;
+            case "ar" -> arabic;
+            default -> french;
+        };
+    }
+
     private String issuePickupCredential(Reservation reservation, Instant now) {
         if (reservation.status() != ReservationStatus.CONFIRMED || !reservation.pickupEnd().isAfter(now)) return null;
         String token = references.pickupQrToken();

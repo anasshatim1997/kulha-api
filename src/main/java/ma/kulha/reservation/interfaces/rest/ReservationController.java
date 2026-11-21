@@ -47,8 +47,8 @@ public class ReservationController {
     }
     @GetMapping("/{reference}")
     ReservationResponse get(@PathVariable String reference, Authentication authentication) {
-        return reservations.get(reference, userId(authentication), hasRole(authentication, "ADMIN"),
-                hasRole(authentication, "MERCHANT"), locale());
+        return reservations.get(reference, userId(authentication), hasAnyRole(authentication, "ADMIN", "SUPER_ADMIN"),
+                hasAnyRole(authentication, "MERCHANT", "MERCHANT_OWNER", "MERCHANT_STAFF"), locale());
     }
     @PatchMapping("/{reference}/cancel")
     ReservationResponse cancel(@PathVariable String reference, @Valid @RequestBody(required = false) CancelReservationRequest request,
@@ -60,9 +60,9 @@ public class ReservationController {
         return reservations.collect(request, userId(authentication), locale());
     }
     private static UUID userId(Authentication authentication) { return UUID.fromString(authentication.getName()); }
-    private static boolean hasRole(Authentication authentication, String role) {
+    private static boolean hasAnyRole(Authentication authentication, String... roles) {
         return authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority)
-                .anyMatch(("ROLE_" + role)::equals);
+                .anyMatch(authority -> java.util.Arrays.stream(roles).anyMatch(role -> authority.equals("ROLE_" + role)));
     }
     private static Locale locale() {
         Locale locale = LocaleContextHolder.getLocale();

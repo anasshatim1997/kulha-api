@@ -79,6 +79,19 @@ class JdbcMerchantRepository implements MerchantRepository {
     }
 
     @Override
+    public Optional<Merchant> findByMember(UUID userId) {
+        return jdbc.sql(SELECT_MERCHANT + """
+                WHERE id = (
+                    SELECT merchant_id FROM merchant.merchant_memberships
+                    WHERE user_id = :userId AND status = 'ACTIVE'
+                )
+                """)
+                .param("userId", userId)
+                .query(JdbcMerchantRepository::mapRow)
+                .optional();
+    }
+
+    @Override
     public void lockForOfferMutation(UUID merchantId) {
         jdbc.sql("SELECT id FROM merchant.merchants WHERE id = :id FOR UPDATE")
                 .param("id", merchantId).query(UUID.class).optional();
