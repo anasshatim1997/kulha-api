@@ -22,7 +22,7 @@ public class AdminAuditQueryService {
     public AuditPage list(LocalDate from, LocalDate to, UUID actorId, String action, String result,
                           int page, int size) {
         int safePage = Math.max(0, page);
-        int safeSize = Math.clamp(size, 1, 100);
+        int safeSize = Math.clamp(size, 1, 5000);
         List<String> clauses = new ArrayList<>();
         if (from != null) clauses.add("(a.created_at AT TIME ZONE 'Africa/Casablanca')::date >= :fromDate");
         if (to != null) clauses.add("(a.created_at AT TIME ZONE 'Africa/Casablanca')::date <= :toDate");

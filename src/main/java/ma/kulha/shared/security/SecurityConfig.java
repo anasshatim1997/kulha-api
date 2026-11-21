@@ -47,6 +47,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/v1/reservations").hasRole("CUSTOMER")
                 .requestMatchers(HttpMethod.PATCH, "/api/v1/reservations/*/cancel").hasRole("CUSTOMER")
                  .requestMatchers(HttpMethod.GET, "/api/v1/reservations/*").hasAnyRole("CUSTOMER", "MERCHANT", "MERCHANT_OWNER", "MERCHANT_STAFF", "ADMIN", "SUPER_ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/support/cases").hasRole("CUSTOMER")
                 .requestMatchers("/api/v1/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
                 .anyRequest().denyAll()
             )
