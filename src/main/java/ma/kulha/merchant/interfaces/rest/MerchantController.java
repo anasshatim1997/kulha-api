@@ -7,6 +7,7 @@ import java.util.UUID;
 import ma.kulha.merchant.application.MerchantService;
 import ma.kulha.merchant.application.MerchantStaffService;
 import ma.kulha.merchant.interfaces.dto.AddMerchantStaffRequest;
+import ma.kulha.merchant.interfaces.dto.UpdateMerchantStaffRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import java.util.List;
@@ -56,8 +57,16 @@ public class MerchantController {
     @PostMapping("/me/staff")
     ResponseEntity<MerchantStaffService.StaffMember> addStaff(@AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody AddMerchantStaffRequest request) {
-        var member = staff.addPickupStaff(UUID.fromString(Objects.requireNonNull(jwt.getSubject())), request.email());
+        var member = staff.addPickupStaff(UUID.fromString(Objects.requireNonNull(jwt.getSubject())), request.email(),
+                request.canValidatePickups(), request.canViewOrders(), request.canManageOffers());
         return ResponseEntity.status(HttpStatus.CREATED).body(member);
+    }
+
+    @PutMapping("/me/staff/{userId}")
+    MerchantStaffService.StaffMember updateStaffPermissions(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID userId,
+            @Valid @RequestBody UpdateMerchantStaffRequest request) {
+        return staff.updatePermissions(UUID.fromString(Objects.requireNonNull(jwt.getSubject())), userId,
+                request.canValidatePickups(), request.canViewOrders(), request.canManageOffers());
     }
 
     @DeleteMapping("/me/staff/{userId}")

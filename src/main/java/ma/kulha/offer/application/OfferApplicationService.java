@@ -282,7 +282,9 @@ public class OfferApplicationService {
     }
 
     private UUID requireMerchant(UUID ownerId) {
-        return merchants.resolveActingMerchant(ownerId).orElseThrow(MerchantNotFoundException::new);
+        UUID merchantId = merchants.resolveActingMerchant(ownerId).orElseThrow(MerchantNotFoundException::new);
+        if (!merchants.can(ownerId, merchantId, "MANAGE_OFFERS")) throw new MerchantNotFoundException();
+        return merchantId;
     }
 
     private Offer owned(UUID merchantId, UUID offerId) {

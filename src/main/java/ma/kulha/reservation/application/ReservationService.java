@@ -174,7 +174,10 @@ public class ReservationService {
         if (request == null) throw new InvalidReservationRequestException("A QR token or pickup code is required.");
         UUID merchantId = merchants.resolveActingMerchant(merchantUserId)
                 .orElseThrow(ReservationNotFoundException::new);
-        if (!merchants.isApproved(merchantId)) throw new ReservationNotFoundException();
+        if (!merchants.isApproved(merchantId)
+                || !merchants.can(merchantUserId, merchantId, "VALIDATE_PICKUPS")) {
+            throw new ReservationNotFoundException();
+        }
         Reservation reservation;
         if (request.qrPayload() != null && !request.qrPayload().isBlank()) {
             String payload = request.qrPayload().trim();
