@@ -98,7 +98,7 @@ public class SupportCaseService {
 
         String customerName = jdbc.sql("SELECT full_name FROM identity.users WHERE id=:id")
                 .param("id", customerId).query(String.class).single();
-        appendTimeline(id, "CUSTOMER", customerId, "Customer", "INTERNAL", request.description().trim());
+        appendTimeline(id, "CUSTOMER", customerId, "Customer", "CUSTOMER", request.description().trim());
         if (hideOffer) appendTimeline(id, "SYSTEM", null, "KULHA!", "INTERNAL",
                 "The offer was hidden from customers while the food-safety case is reviewed.");
         audit.append(customerId, "SUPPORT_CASE_OPENED", "SUPPORT_CASE", reference, category, "SUCCESS");
@@ -181,6 +181,8 @@ public class SupportCaseService {
                 if (item.merchantId() == null) throw new ResponseStatusException(HttpStatus.CONFLICT, "This case has no linked shop.");
                 UUID owner = jdbc.sql("SELECT owner_user_id FROM merchant.merchants WHERE id=:id")
                         .param("id", item.merchantId()).query(UUID.class).single();
+                jdbc.sql("UPDATE admin.support_cases SET status='WAITING_REPLY', updated_at=:now WHERE id=:id")
+                        .param("now", now.atOffset(java.time.ZoneOffset.UTC)).param("id", item.id()).update();
                 notifications.enqueue(owner, "SUPPORT_CASE_UPDATE", "KULHA support needs your reply",
                         "Please contact KULHA about support case " + reference + ".",
                         "Open KULHA", "/merchant/dashboard");
