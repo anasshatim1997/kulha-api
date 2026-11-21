@@ -59,7 +59,7 @@ public class AdminMerchantController {
     AdminMerchantResponse approve(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
                                   @Valid @RequestBody(required = false) MerchantApprovalRequest request) {
         UUID adminId = UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
-        AdminMerchantResponse response = AdminMerchantResponse.from(merchants.approve(adminId, id));
+        AdminMerchantResponse response = AdminMerchantResponse.from(merchants.approve(adminId, id, request == null ? null : request.reason()));
         appendInternalNote(adminId, id, request == null ? null : request.internalNote());
         return response;
     }

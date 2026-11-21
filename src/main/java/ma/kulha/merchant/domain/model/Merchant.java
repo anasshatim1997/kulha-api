@@ -157,6 +157,13 @@ public record Merchant(
         return decided(MerchantStatus.APPROVED, null, adminId, now);
     }
 
+    public Merchant approve(UUID adminId, String reason, Instant now) {
+        if (status != MerchantStatus.PENDING && status != MerchantStatus.SUSPENDED) {
+            throw new InvalidMerchantStateException("Only a pending or suspended merchant can be approved.");
+        }
+        return decided(MerchantStatus.APPROVED, requireReason(reason), adminId, now);
+    }
+
     public Merchant reject(UUID adminId, String reason, Instant now) {
         if (status != MerchantStatus.PENDING) {
             throw new InvalidMerchantStateException("Only a pending merchant can be rejected.");

@@ -39,7 +39,7 @@ final class EmailTemplates {
                     "Votre commerce est approuvé - KULHA!",
                     "Bienvenue parmi les commerces KULHA!.",
                     "Bonne nouvelle : « " + require(params, "merchantName") + " » a été approuvé sur KULHA!. Les droits commerçant sont maintenant activés sur votre compte.",
-                    "Vous pourrez accéder aux outils commerçant à mesure de leur mise à disposition.");
+                    "Motif : " + require(params, "reason") + " Vous pourrez accéder aux outils commerçant à mesure de leur mise à disposition.");
             case MERCHANT_REJECTED -> notice(
                     "Mise à jour de votre demande commerçant - KULHA!",
                     "Votre demande nécessite une correction.",
