@@ -169,12 +169,69 @@ public class ReservationService {
         return ReservationResponse.from(cancelled, locale, now);
     }
     @Transactional
+    public ma.kulha.reservation.interfaces.dto.PickupPreviewResponse previewPickup(
+            CollectReservationRequest request, UUID merchantUserId) {
+        Instant now = clock.instant();
+        if (request == null) throw new InvalidReservationRequestException("A QR token or pickup code is required.");
+        UUID merchantId = merchants.resolveActingMerchant(merchantUserId)
+                .orElseThrow(ReservationNotFoundException::new);
+        if (!merchants.isApproved(merchantId)
+                || !merchants.can(merchantUserId, merchantId, "VALIDATE_PICKUPS")) {
+            throw new ReservationNotFoundException();
+        }
+        Reservation reservation;
+        if (request.qrPayload() != null && !request.qrPayload().isBlank()) {
+            String payload = request.qrPayload().trim();
+            if (!payload.startsWith(QR_PREFIX) || payload.length() > 100)
+                throw new InvalidReservationRequestException("The QR code is invalid.");
+            String token = payload.substring(QR_PREFIX.length());
+            if (token.length() < 40 || token.length() > 60)
+                throw new InvalidReservationRequestException("The QR code is invalid.");
+            String tokenHash = ReservationReferenceGenerator.hashPickupQrToken(token);
+            reservation = reservations.findByPickupCredentialHashForUpdate(tokenHash, now)
+                    .orElseThrow(ReservationNotFoundException::new);
+        } else {
+            if (request.reference() == null || request.pickupCode() == null || request.pickupCode().isBlank())
+                throw new InvalidReservationRequestException("Enter the reservation reference and pickup code.");
+            reservation = reservations.findByReferenceForUpdate(request.reference().trim())
+                    .orElseThrow(ReservationNotFoundException::new);
+            if (!MessageDigest.isEqual(reservation.pickupCode().getBytes(StandardCharsets.UTF_8),
+                    request.pickupCode().trim().toUpperCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8))) {
+                throw new ReservationNotFoundException();
+            }
+        }
+        if (!reservation.merchantId().equals(merchantId)) throw new ReservationNotFoundException();
+        String validationState;
+        boolean canConfirm = false;
+        if (reservation.status() == ReservationStatus.COMPLETED) {
+            validationState = "ALREADY_COLLECTED";
+        } else if (reservation.status() != ReservationStatus.CONFIRMED) {
+            validationState = "NOT_VALID";
+        } else if (now.isBefore(reservation.pickupStart())) {
+            validationState = "WINDOW_NOT_OPEN";
+        } else if (!now.isBefore(reservation.pickupEnd())) {
+            validationState = "WINDOW_ENDED";
+        } else {
+            validationState = "VALID";
+            canConfirm = true;
+        }
+        return new ma.kulha.reservation.interfaces.dto.PickupPreviewResponse(
+                reservation.reference(), reservation.merchantName(), reservation.offerTitle(),
+                reservation.quantity(), reservation.totalPriceMinor(), "MAD",
+                reservation.pickupStart(), reservation.pickupEnd(), reservation.status().name(),
+                validationState, canConfirm);
+    }
+
+    @Transactional
     public ReservationResponse collect(CollectReservationRequest request, UUID merchantUserId, Locale locale) {
         Instant now = clock.instant();
         if (request == null) throw new InvalidReservationRequestException("A QR token or pickup code is required.");
         UUID merchantId = merchants.resolveActingMerchant(merchantUserId)
                 .orElseThrow(ReservationNotFoundException::new);
-        if (!merchants.isApproved(merchantId)) throw new ReservationNotFoundException();
+        if (!merchants.isApproved(merchantId)
+                || !merchants.can(merchantUserId, merchantId, "VALIDATE_PICKUPS")) {
+            throw new ReservationNotFoundException();
+        }
         Reservation reservation;
         if (request.qrPayload() != null && !request.qrPayload().isBlank()) {
             String payload = request.qrPayload().trim();

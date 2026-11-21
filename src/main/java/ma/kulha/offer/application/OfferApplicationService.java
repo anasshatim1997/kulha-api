@@ -240,6 +240,17 @@ public class OfferApplicationService {
         });
     }
 
+    public Offer adminRequestEdit(UUID adminId, UUID offerId, String reason) {
+        return tx.execute(status -> {
+            Offer current = offers.findById(offerId).orElseThrow(OfferNotFoundException::new);
+            Offer updated = current.unpublish(clock.instant());
+            if (!offers.update(updated, current.version())) throw new ma.kulha.offer.domain.model.StaleOfferVersionException();
+            audit.append(adminId, "OFFER_EDIT_REQUESTED", "OFFER", offerId.toString(), reason, "SUCCESS");
+            emitAfterCommit("OfferChanged", updated);
+            return updated;
+        });
+    }
+
     public int expireDueOffers() {
         int changed = 0;
         Instant now = clock.instant();

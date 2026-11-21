@@ -5,6 +5,8 @@ import jakarta.validation.Valid;
 import java.util.Objects;
 import java.util.UUID;
 import ma.kulha.merchant.application.MerchantService;
+import ma.kulha.admin.application.AuditApi;
+import ma.kulha.merchant.interfaces.dto.MerchantApprovalRequest;
 import ma.kulha.merchant.application.PageResult;
 import ma.kulha.merchant.application.AdminMerchantView;
 import ma.kulha.merchant.domain.model.MerchantStatus;
@@ -29,9 +31,11 @@ public class AdminMerchantController {
     private static final int MAX_PAGE_SIZE = 50;
 
     private final MerchantService merchants;
+    private final AuditApi audit;
 
-    AdminMerchantController(MerchantService merchants) {
+    AdminMerchantController(MerchantService merchants, AuditApi audit) {
         this.merchants = merchants;
+        this.audit = audit;
     }
 
     @GetMapping
@@ -52,19 +56,44 @@ public class AdminMerchantController {
     }
 
     @PostMapping("/{id}/approve")
-    AdminMerchantResponse approve(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
-        return AdminMerchantResponse.from(merchants.approve(UUID.fromString(Objects.requireNonNull(jwt.getSubject())), id));
+    AdminMerchantResponse approve(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
+                                  @Valid @RequestBody(required = false) MerchantApprovalRequest request) {
+        UUID adminId = UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
+        AdminMerchantResponse response = AdminMerchantResponse.from(merchants.approve(adminId, id, request == null ? null : request.reason()));
+        appendInternalNote(adminId, id, request == null ? null : request.internalNote());
+        return response;
+    }
+
+    @PostMapping("/{id}/request-information")
+    AdminMerchantResponse requestInformation(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
+                                 @Valid @RequestBody DecisionReasonRequest request) {
+        UUID adminId = UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
+        AdminMerchantResponse response = AdminMerchantResponse.from(merchants.requestInformation(adminId, id, request.reason()));
+        appendInternalNote(adminId, id, request.internalNote());
+        return response;
     }
 
     @PostMapping("/{id}/reject")
     AdminMerchantResponse reject(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
                                  @Valid @RequestBody DecisionReasonRequest request) {
-        return AdminMerchantResponse.from(merchants.reject(UUID.fromString(Objects.requireNonNull(jwt.getSubject())), id, request.reason()));
+        UUID adminId = UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
+        AdminMerchantResponse response = AdminMerchantResponse.from(merchants.reject(adminId, id, request.reason()));
+        appendInternalNote(adminId, id, request.internalNote());
+        return response;
     }
 
     @PostMapping("/{id}/suspend")
     AdminMerchantResponse suspend(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
-                                  @Valid @RequestBody DecisionReasonRequest request) {
-        return AdminMerchantResponse.from(merchants.suspend(UUID.fromString(Objects.requireNonNull(jwt.getSubject())), id, request.reason()));
+                                 @Valid @RequestBody DecisionReasonRequest request) {
+        UUID adminId = UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
+        AdminMerchantResponse response = AdminMerchantResponse.from(merchants.suspend(adminId, id, request.reason()));
+        appendInternalNote(adminId, id, request.internalNote());
+        return response;
+    }
+
+    private void appendInternalNote(UUID adminId, UUID merchantId, String note) {
+        if (note != null && !note.isBlank()) {
+            audit.append(adminId, "MERCHANT_REVIEW_INTERNAL_NOTE", "MERCHANT", merchantId.toString(), note.trim(), "SUCCESS");
+        }
     }
 }

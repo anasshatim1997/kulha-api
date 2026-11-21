@@ -9,6 +9,7 @@ import ma.kulha.reservation.interfaces.dto.CollectReservationRequest;
 import ma.kulha.reservation.interfaces.dto.CreateReservationRequest;
 import ma.kulha.reservation.interfaces.dto.ReservationAvailabilityResponse;
 import ma.kulha.reservation.interfaces.dto.ReservationResponse;
+import ma.kulha.reservation.interfaces.dto.PickupPreviewResponse;
 import ma.kulha.shared.web.PageResponse;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.HttpStatus;
@@ -54,6 +55,10 @@ public class ReservationController {
     ReservationResponse cancel(@PathVariable String reference, @Valid @RequestBody(required = false) CancelReservationRequest request,
             Authentication authentication) {
         return reservations.cancel(reference, userId(authentication), request, locale());
+    }
+    @PostMapping("/pickup/check")
+    PickupPreviewResponse previewPickup(@Valid @RequestBody CollectReservationRequest request, Authentication authentication) {
+        return reservations.previewPickup(request, userId(authentication));
     }
     @PostMapping("/collect")
     ReservationResponse collect(@Valid @RequestBody CollectReservationRequest request, Authentication authentication) {
