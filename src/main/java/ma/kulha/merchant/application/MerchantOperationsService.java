@@ -129,7 +129,7 @@ public class MerchantOperationsService {
         String where = switch (filter) {
             case "TO_COLLECT" -> " AND r.status='CONFIRMED'";
             case "DONE" -> " AND r.status IN ('COMPLETED','CANCELLED','EXPIRED')";
-            case "TODAY" -> " AND (r.created_at AT TIME ZONE 'Africa/Casablanca')::date = (now() AT TIME ZONE 'Africa/Casablanca')::date";
+            case "TODAY" -> " AND (r.pickup_start AT TIME ZONE 'Africa/Casablanca')::date = (now() AT TIME ZONE 'Africa/Casablanca')::date";
             case "ALL" -> "";
             default -> throw new IllegalArgumentException("Unsupported order filter.");
         };
