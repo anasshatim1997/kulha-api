@@ -95,8 +95,9 @@ public class MerchantService {
     }
 
     public AdminMerchantView approve(UUID adminId, UUID merchantId, String reason) {
-        return decide(adminId, merchantId, "MERCHANT_APPROVED", reason,
-                (merchant, now) -> merchant.approve(adminId, reason, now),
+        String approvalReason = reason == null || reason.isBlank() ? "Commerce approuvé." : reason.trim();
+        return decide(adminId, merchantId, "MERCHANT_APPROVED", approvalReason,
+                (merchant, now) -> merchant.approve(adminId, approvalReason, now),
                 identity::grantMerchantRole, TemplateKey.MERCHANT_APPROVED);
     }
 
