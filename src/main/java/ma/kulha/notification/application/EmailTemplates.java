@@ -45,6 +45,11 @@ final class EmailTemplates {
                     "Votre demande nécessite une correction.",
                     "La demande concernant « " + require(params, "merchantName") + " » n’a pas été acceptée en l’état.",
                     "Motif : " + require(params, "reason") + " Vous pouvez corriger les informations de votre commerce depuis votre espace commerçant et soumettre à nouveau votre demande.");
+            case MERCHANT_INFO_REQUIRED -> notice(
+                    "Informations complémentaires nécessaires - KULHA!",
+                    "Votre demande commerçant doit être complétée.",
+                    "La demande concernant « " + require(params, "merchantName") + " » nécessite des informations complémentaires avant que notre équipe puisse poursuivre son examen.",
+                    "Informations demandées : " + require(params, "reason") + " Connectez-vous à votre espace commerçant, mettez à jour votre dossier puis soumettez-le à nouveau.");
             case MERCHANT_SUSPENDED -> notice(
                     "Statut de votre commerce - KULHA!",
                     "Votre espace commerçant est temporairement suspendu.",
