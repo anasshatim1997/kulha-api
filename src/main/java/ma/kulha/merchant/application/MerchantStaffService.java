@@ -38,12 +38,16 @@ public class MerchantStaffService {
                         rs.getBoolean("can_validate_pickups"), rs.getBoolean("can_view_orders"),
                         rs.getBoolean("can_manage_offers"))).list();
 
-        return memberships.stream()
+        List<StaffMember> team = new java.util.ArrayList<>();
+        users.findAccountById(ownerUserId).ifPresent(owner -> team.add(new StaffMember(
+                owner.id(), owner.email(), owner.fullName(), "OWNER", Instant.EPOCH, true, true, true)));
+        memberships.stream()
                 .flatMap(membership -> users.findAccountById(membership.userId()).stream()
                         .map(account -> new StaffMember(account.id(), account.email(), account.fullName(),
                                 membership.role(), membership.addedAt(), membership.canValidatePickups(),
                                 membership.canViewOrders(), membership.canManageOffers())))
-                .toList();
+                .forEach(team::add);
+        return List.copyOf(team);
     }
 
     @Transactional

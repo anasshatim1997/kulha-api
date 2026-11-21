@@ -43,7 +43,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/merchants/me/offers", "/api/v1/merchants/me/offers/**").hasAnyRole("MERCHANT", "MERCHANT_OWNER", "MERCHANT_STAFF")
                 .requestMatchers(HttpMethod.GET, "/api/v1/reservations/availability").hasRole("CUSTOMER")
                 .requestMatchers(HttpMethod.GET, "/api/v1/reservations").hasRole("CUSTOMER")
-                 .requestMatchers(HttpMethod.POST, "/api/v1/reservations/collect").hasAnyRole("MERCHANT", "MERCHANT_OWNER", "MERCHANT_STAFF")
+                .requestMatchers(HttpMethod.POST, "/api/v1/reservations/pickup/check", "/api/v1/reservations/collect").hasAnyRole("MERCHANT", "MERCHANT_OWNER", "MERCHANT_STAFF")
                 .requestMatchers(HttpMethod.POST, "/api/v1/reservations").hasRole("CUSTOMER")
                 .requestMatchers(HttpMethod.PATCH, "/api/v1/reservations/*/cancel").hasRole("CUSTOMER")
                  .requestMatchers(HttpMethod.GET, "/api/v1/reservations/*").hasAnyRole("CUSTOMER", "MERCHANT", "MERCHANT_OWNER", "MERCHANT_STAFF", "ADMIN", "SUPER_ADMIN")

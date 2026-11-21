@@ -22,7 +22,8 @@ public class AdminOfferModerationService {
                 SELECT o.id, o.title, m.name AS shop_name, m.city, o.price_minor, o.original_price_minor,
                        o.quantity_total, o.quantity_reserved, o.allergens_status,
                        array_to_string(o.allergens, ',') AS allergens, o.food_notes,
-                       o.status, o.pickup_start, o.pickup_end, o.image_url
+                       o.status, o.pickup_start, o.pickup_end, o.image_url,
+                       (SELECT count(*) FROM admin.support_cases c WHERE c.offer_id=o.id AND c.status <> 'RESOLVED') AS reported_count
                 FROM offer.offers o JOIN merchant.merchants m ON m.id=o.merchant_id
                 WHERE TRUE
                 """ + clause + " ORDER BY CASE WHEN o.status='SUSPENDED' THEN 0 WHEN o.status='UNPUBLISHED' THEN 1 ELSE 2 END, o.updated_at DESC, o.id LIMIT :limit OFFSET :offset")
@@ -32,7 +33,7 @@ public class AdminOfferModerationService {
                 rs.getObject("id", UUID.class), rs.getString("title"), rs.getString("shop_name"),
                 rs.getString("city"), rs.getInt("price_minor"), (Integer) rs.getObject("original_price_minor"),
                 rs.getInt("quantity_total"), rs.getInt("quantity_reserved"), rs.getString("allergens_status"),
-                rs.getString("allergens"), rs.getString("food_notes"), rs.getString("status"),
+                rs.getString("allergens"), rs.getString("food_notes"), rs.getString("status"), rs.getLong("reported_count"),
                 instant(rs.getObject("pickup_start", java.time.OffsetDateTime.class)),
                 instant(rs.getObject("pickup_end", java.time.OffsetDateTime.class)), rs.getString("image_url")
         )).list();
@@ -47,13 +48,14 @@ public class AdminOfferModerationService {
                 SELECT o.id, o.title, m.name AS shop_name, m.city, o.price_minor, o.original_price_minor,
                        o.quantity_total, o.quantity_reserved, o.allergens_status,
                        array_to_string(o.allergens, ',') AS allergens, o.food_notes,
-                       o.status, o.pickup_start, o.pickup_end, o.image_url
+                       o.status, o.pickup_start, o.pickup_end, o.image_url,
+                       (SELECT count(*) FROM admin.support_cases c WHERE c.offer_id=o.id AND c.status <> 'RESOLVED') AS reported_count
                 FROM offer.offers o JOIN merchant.merchants m ON m.id=o.merchant_id WHERE o.id=:id
                 """).param("id", id).query((rs,row) -> new OfferRow(
                 rs.getObject("id", UUID.class), rs.getString("title"), rs.getString("shop_name"), rs.getString("city"),
                 rs.getInt("price_minor"), (Integer) rs.getObject("original_price_minor"), rs.getInt("quantity_total"),
                 rs.getInt("quantity_reserved"), rs.getString("allergens_status"), rs.getString("allergens"),
-                rs.getString("food_notes"), rs.getString("status"),
+                rs.getString("food_notes"), rs.getString("status"), rs.getLong("reported_count"),
                 instant(rs.getObject("pickup_start", java.time.OffsetDateTime.class)),
                 instant(rs.getObject("pickup_end", java.time.OffsetDateTime.class)), rs.getString("image_url")
         )).optional().orElseThrow(OfferNotFoundException::new);
@@ -64,7 +66,7 @@ public class AdminOfferModerationService {
     }
     public record OfferRow(UUID id, String title, String shopName, String city, int priceMinor,
                            Integer originalPriceMinor, int quantityTotal, int quantityReserved,
-                           String allergensStatus, String allergens, String foodNotes, String status,
+                           String allergensStatus, String allergens, String foodNotes, String status, long reportedCount,
                            java.time.Instant pickupStart, java.time.Instant pickupEnd, String imageUrl) {}
     public record OfferPage(List<OfferRow> items, int page, int size, long total) {}
 }
