@@ -4,5 +4,6 @@ public enum MerchantStatus {
     PENDING,
     APPROVED,
     REJECTED,
+    INFO_REQUIRED,
     SUSPENDED
 }

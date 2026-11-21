@@ -102,6 +102,12 @@ public class MerchantService {
                 ownerId -> { }, TemplateKey.MERCHANT_REJECTED);
     }
 
+    public AdminMerchantView requestInformation(UUID adminId, UUID merchantId, String reason) {
+        return decide(adminId, merchantId, "MERCHANT_INFO_REQUIRED", reason,
+                (merchant, now) -> merchant.requestInformation(adminId, reason, now),
+                ownerId -> { }, TemplateKey.MERCHANT_REJECTED);
+    }
+
     public AdminMerchantView suspend(UUID adminId, UUID merchantId, String reason) {
         return decide(adminId, merchantId, "MERCHANT_SUSPENDED", reason,
                 (merchant, now) -> merchant.suspend(adminId, reason, now),

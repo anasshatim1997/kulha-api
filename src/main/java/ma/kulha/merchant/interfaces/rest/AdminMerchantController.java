@@ -56,6 +56,12 @@ public class AdminMerchantController {
         return AdminMerchantResponse.from(merchants.approve(UUID.fromString(Objects.requireNonNull(jwt.getSubject())), id));
     }
 
+    @PostMapping("/{id}/request-information")
+    AdminMerchantResponse requestInformation(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
+                                 @Valid @RequestBody DecisionReasonRequest request) {
+        return AdminMerchantResponse.from(merchants.requestInformation(UUID.fromString(Objects.requireNonNull(jwt.getSubject())), id, request.reason()));
+    }
+
     @PostMapping("/{id}/reject")
     AdminMerchantResponse reject(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
                                  @Valid @RequestBody DecisionReasonRequest request) {
