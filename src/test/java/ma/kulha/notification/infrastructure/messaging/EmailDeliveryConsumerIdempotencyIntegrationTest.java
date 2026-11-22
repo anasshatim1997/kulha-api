@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import ma.kulha.notification.application.EmailSender;
 import ma.kulha.notification.domain.EmailDeliveryEvent;
+import ma.kulha.notification.domain.NotificationEvent;
 import ma.kulha.support.AbstractApiIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -74,6 +75,23 @@ class EmailDeliveryConsumerIdempotencyIntegrationTest extends AbstractApiIntegra
             allowFirstSendToFinish.countDown();
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void duplicateNotificationEventIsPersistedOnlyOnce() throws Exception {
+        var customer = createUser("notification-redelivery@example.test", true);
+        UUID eventId = UUID.randomUUID();
+        NotificationEvent event = new NotificationEvent(eventId, customer.id(), "RESERVATION_CONFIRMED",
+                "Reservation confirmed", "Your basket is booked.", "View reservation",
+                "/reservations", Instant.now());
+        String payload = mapper.writeValueAsString(event);
+        NotificationEventConsumer consumer = new NotificationEventConsumer(mapper, jdbc);
+
+        consumer.consume(payload);
+        consumer.consume(payload);
+
+        assertThat(jdbc.sql("SELECT count(*) FROM notification.notifications WHERE id=:id")
+                .param("id", eventId).query(Long.class).single()).isEqualTo(1L);
     }
 
     private static void deliver(EmailDeliveryConsumer consumer, String payload) {
