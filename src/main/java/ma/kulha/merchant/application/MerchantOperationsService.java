@@ -6,6 +6,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import ma.kulha.admin.application.AuditApi;
+import ma.kulha.shared.csv.CsvEscaper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -117,10 +118,10 @@ public class MerchantOperationsService {
         StringBuilder csv = new StringBuilder("date,reference,basket,quantity,amount_mad,status\n");
         for (OrderRow row : ordersForRange(merchantId, sales.from(), sales.to(), 500)) {
             csv.append(row.createdAt().atZone(SHOP_ZONE).toLocalDate()).append(',')
-                    .append(csv(row.reference())).append(',').append(csv(row.basket()))
+                    .append(CsvEscaper.cell(row.reference())).append(',').append(CsvEscaper.cell(row.basket()))
                     .append(',').append(row.quantity()).append(',')
                     .append(String.format(java.util.Locale.ROOT, "%.2f", row.amountMinor() / 100.0)).append(',')
-                    .append(csv(row.status())).append('\n');
+                    .append(CsvEscaper.cell(row.status())).append('\n');
         }
         return csv.toString();
     }
@@ -184,8 +185,6 @@ public class MerchantOperationsService {
         String[] parts = name.trim().split("\\s+");
         return parts[0] + (parts.length > 1 ? " " + parts[parts.length - 1].substring(0, 1).toUpperCase() + "." : "");
     }
-    private static String csv(String value) { return "\"" + (value == null ? "" : value.replace("\"", "\"\"")) + "\""; }
-
     private record Shop(String name, String city) {}
     private record Stats(long liveOffers, long reservedToday, long basketsToday, long toCollectNow, long collectedToday) {}
     private record Totals(long basketsCollected, long salesMinor, long cancelled, long notCollected) {}
