@@ -1,19 +1,24 @@
 package ma.kulha.identity.application;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import ma.kulha.identity.domain.model.Role;
 import ma.kulha.identity.domain.model.User;
 import ma.kulha.identity.domain.repository.UserRepository;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 
 @Service
 class IdentityApiService implements IdentityApi {
 
     private final UserRepository users;
+    private final JdbcClient jdbc;
 
-    IdentityApiService(UserRepository users) {
+    IdentityApiService(UserRepository users, JdbcClient jdbc) {
         this.users = users;
+        this.jdbc = jdbc;
     }
 
     @Override
@@ -36,5 +41,25 @@ class IdentityApiService implements IdentityApi {
     public void revokeMerchantRole(UUID userId) {
         users.removeRole(userId, Role.MERCHANT);
         users.removeRole(userId, Role.MERCHANT_OWNER);
+    }
+
+    @Override
+    public List<SupportUserProfile> findSupportProfiles(Collection<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) return List.of();
+        return jdbc.sql("""
+                SELECT id, full_name, email, phone, status
+                FROM identity.users
+                WHERE id IN (:ids)
+                """)
+                .param("ids", userIds)
+                .query((rs, row) -> new SupportUserProfile(rs.getObject("id", UUID.class),
+                        rs.getString("full_name"), rs.getString("email"), rs.getString("phone"),
+                        "ACTIVE".equals(rs.getString("status"))))
+                .list();
+    }
+
+    @Override
+    public Optional<SupportUserProfile> findSupportProfile(UUID userId) {
+        return findSupportProfiles(List.of(userId)).stream().findFirst();
     }
 }
