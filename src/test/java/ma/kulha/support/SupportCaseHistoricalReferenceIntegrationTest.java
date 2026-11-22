@@ -51,7 +51,6 @@ class SupportCaseHistoricalReferenceIntegrationTest extends AbstractApiIntegrati
                 .param("offer", offer.id()).param("now", now).update();
 
         merchantService.suspend(admin.id(), merchant.id(), "Shop temporarily suspended");
-        offerApplicationService.adminSuspend(admin.id(), offer.id(), "Offer under review");
 
         mvc.perform(get("/api/v1/admin/support-cases/" + reference)
                         .header("Authorization", "Bearer " + tokenFor(admin)))
