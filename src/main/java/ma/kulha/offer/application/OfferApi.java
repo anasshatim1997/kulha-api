@@ -1,6 +1,8 @@
 package ma.kulha.offer.application;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -9,4 +11,9 @@ public interface OfferApi {
     void releaseUnits(UUID offerId, int units);
     boolean isReservable(UUID offerId, Instant now);
     Optional<OfferSnapshot> snapshot(UUID offerId);
+
+    /** Batch-resolves historical offer references without filtering by publication status. */
+    List<SupportOfferProfile> findSupportProfiles(Collection<UUID> offerIds);
+
+    record SupportOfferProfile(UUID id, String title, String status) {}
 }
