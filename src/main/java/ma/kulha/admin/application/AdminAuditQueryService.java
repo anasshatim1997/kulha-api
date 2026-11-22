@@ -64,9 +64,6 @@ public class AdminAuditQueryService {
     @Transactional
     public void writeExport(UUID adminId, LocalDate from, LocalDate to, UUID actorId, String action, String result,
                             Writer writer) throws IOException {
-        audit.append(adminId, "ADMIN_AUDIT_EXPORTED", "AUDIT_LOG", "QUERY", "Filtered export", "SUCCESS");
-        writer.write("time,actor,action,record,reason,result,correlation_id\n");
-
         writeExport(adminId, from, to, actorId, action, result, null, writer);
     }
 
@@ -74,7 +71,7 @@ public class AdminAuditQueryService {
     public void writeExport(UUID adminId, LocalDate from, LocalDate to, UUID actorId, String action, String result,
                             String query, Writer writer) throws IOException {
         audit.append(adminId, "ADMIN_AUDIT_EXPORTED", "AUDIT_LOG", "QUERY", "Filtered export", "SUCCESS");
-        writer.write("time,actor,action,record,reason,result,correlation_id\\n");
+        writer.write("time,actor,action,record,reason,result,correlation_id\n");
 
         Filter filter = filter(from, to, actorId, action, result, query);
         OffsetDateTime cursorCreatedAt = null;
