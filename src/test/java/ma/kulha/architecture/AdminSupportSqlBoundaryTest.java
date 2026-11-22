@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 
 class AdminSupportSqlBoundaryTest {
     private static final Pattern FOREIGN_SCHEMA_TABLE = Pattern.compile(
-            "\\b(identity\\.users|identity\\.user_roles|merchant\\.merchants|merchant\\.merchant_memberships|offer\\.offers|reservation\\.reservations)\\b",
+            "\\b(identity|merchant|offer|reservation|notification|payment)\\.[a-z_]+\\b",
             Pattern.CASE_INSENSITIVE);
 
     @Test
