@@ -1,6 +1,7 @@
 package ma.kulha.identity.application;
 
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import ma.kulha.identity.domain.model.Role;
 import ma.kulha.identity.domain.model.User;
@@ -36,11 +37,11 @@ public class IdentityUserAccountDirectory implements UserAccountDirectory {
     }
 
     @Override
-    public boolean hasActiveRole(UUID userId, Role role) {
+    public Set<Role> findActiveRoles(UUID userId) {
         return users.findById(userId)
                 .filter(user -> user.status() == UserStatus.ACTIVE)
-                .filter(user -> user.hasRole(role))
-                .isPresent();
+                .map(User::roles)
+                .orElseGet(Set::of);
     }
 
     private Account toAccount(User user) {
