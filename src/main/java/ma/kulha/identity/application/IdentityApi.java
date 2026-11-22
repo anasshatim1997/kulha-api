@@ -2,6 +2,7 @@ package ma.kulha.identity.application;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -22,6 +23,8 @@ public interface IdentityApi {
 
     /** Active role names without exposing identity-domain types across module boundaries. */
     Set<String> findActiveRoleNames(UUID userId);
+
+    Map<UUID, String> findLocales(Collection<UUID> userIds);
 
     UserPreferences getUserPreferences(UUID userId, String defaultLocale);
     UserPreferences updateUserPreferences(UUID userId, UserPreferences preferences);
