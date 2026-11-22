@@ -28,8 +28,8 @@ class MerchantStaffRoleConcurrencyIntegrationTest extends AbstractApiIntegration
         User ownerB = createUser("staff-race-owner-b@example.com", true);
         User staff = createUser("staff-race-member@example.com", true);
 
-        Merchant merchantA = merchantService.apply(ownerA.id(), profile("Boulangerie Atlas"));
-        Merchant merchantB = merchantService.apply(ownerB.id(), profile("Épicerie Medina"));
+        Merchant merchantA = merchantService.apply(ownerA.id(), profile("Boulangerie Atlas", "+212600000001"));
+        Merchant merchantB = merchantService.apply(ownerB.id(), profile("Épicerie Medina", "+212600000002"));
         merchantService.approve(admin.id(), merchantA.id());
         merchantService.approve(admin.id(), merchantB.id());
         staffService.addPickupStaff(ownerA.id(), staff.email(), true, true, false);
@@ -61,9 +61,9 @@ class MerchantStaffRoleConcurrencyIntegrationTest extends AbstractApiIntegration
         }
     }
 
-    private Merchant.Profile profile(String name) {
+    private Merchant.Profile profile(String name, String phone) {
         return new Merchant.Profile(name, BusinessType.BAKERY, "12 rue des Fleurs", "Casablanca",
-                "+212600000000", "Lun-Sam 7h-20h");
+                phone, "Lun-Sam 7h-20h");
     }
 
     private void runConcurrently(ThrowingRunnable first, ThrowingRunnable second) throws Exception {
