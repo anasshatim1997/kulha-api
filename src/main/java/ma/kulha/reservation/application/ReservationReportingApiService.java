@@ -113,6 +113,23 @@ class ReservationReportingApiService implements ReservationReportingApi {
                 .query(ReservationReportingApiService::mapOrder).list();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<SalesExportSnapshot> completedSalesForRange(UUID merchantId, LocalDate from, LocalDate to, ZoneId zone) {
+        return jdbc.sql("""
+                SELECT reference, offer_title, quantity, total_price_minor, updated_at
+                FROM reservation.reservations
+                WHERE merchant_id=:merchant AND status='COMPLETED'
+                  AND (updated_at AT TIME ZONE :zone)::date BETWEEN :fromDate AND :toDate
+                ORDER BY updated_at DESC, id
+                """).param("merchant", merchantId).param("zone", zone.getId())
+                .param("fromDate", from).param("toDate", to)
+                .query((rs, row) -> new SalesExportSnapshot(rs.getString("reference"), rs.getString("offer_title"),
+                        rs.getInt("quantity"), rs.getLong("total_price_minor"),
+                        instant(rs.getObject("updated_at", OffsetDateTime.class))))
+                .list();
+    }
+
     private static OrderSnapshot mapOrder(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
         return new OrderSnapshot(rs.getObject("customer_id", UUID.class), rs.getString("reference"),
                 rs.getString("offer_title"), rs.getInt("quantity"),
