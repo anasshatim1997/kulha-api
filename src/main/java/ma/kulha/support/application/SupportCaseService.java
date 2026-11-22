@@ -190,6 +190,12 @@ public class SupportCaseService {
     @Transactional
     public void act(UUID adminId, String reference, String action, String reason) {
         CaseSummary item = requireCaseAccess(adminId, reference);
+        boolean supportOnly = userAccounts.hasActiveRole(adminId, Role.SUPPORT)
+                && !userAccounts.hasActiveRole(adminId, Role.ADMIN)
+                && !userAccounts.hasActiveRole(adminId, Role.SUPER_ADMIN);
+        if (supportOnly && "KEEP_OFFER_HIDDEN".equals(action)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Offer moderation is not part of support-agent access.");
+        }
         String cleanReason = reason == null ? "" : reason.trim();
         if (cleanReason.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A reason is required.");
         Instant now = clock.instant();
@@ -236,7 +242,9 @@ public class SupportCaseService {
         }
         CaseSummary item = requireCaseAccess(actorId, reference);
         boolean superAdministrator = userAccounts.hasActiveRole(actorId, Role.SUPER_ADMIN);
-        boolean assignedSupport = userAccounts.hasActiveRole(actorId, Role.SUPPORT) && actorId.equals(item.assignedTo());
+        boolean assignedSupport = !userAccounts.hasActiveRole(actorId, Role.ADMIN)
+                && !superAdministrator && userAccounts.hasActiveRole(actorId, Role.SUPPORT)
+                && actorId.equals(item.assignedTo());
         if (!superAdministrator && !assignedSupport) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Customer disclosure is not permitted.");
         }
