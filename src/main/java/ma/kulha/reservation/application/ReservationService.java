@@ -97,7 +97,7 @@ public class ReservationService {
             }
             try {
                 return objectMapper.readValue(previous.get().responseSnapshot(), ReservationResponse.class);
-            } catch (JsonProcessingException invalidSnapshot) {
+            } catch (JacksonException invalidSnapshot) {
                 throw new IllegalStateException("Stored reservation idempotency response cannot be read.", invalidSnapshot);
             }
         }
@@ -140,7 +140,7 @@ public class ReservationService {
         try {
             reservationIdempotency.save(customerId, key, requestHash, confirmed.id(),
                     objectMapper.writeValueAsString(response));
-        } catch (JsonProcessingException serializationFailure) {
+        } catch (JacksonException serializationFailure) {
             throw new IllegalStateException("Reservation response could not be persisted for idempotent replay.",
                     serializationFailure);
         }
