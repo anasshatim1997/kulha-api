@@ -68,13 +68,13 @@ class OfferApiService implements OfferApi {
     @Override public List<SupportOfferProfile> findSupportProfiles(Collection<UUID> offerIds) {
         if (offerIds == null || offerIds.isEmpty()) return List.of();
         return jdbc.sql("""
-                SELECT id, title, status
+                SELECT id, merchant_id, title, status
                 FROM offer.offers
                 WHERE id IN (:ids)
                 """)
                 .param("ids", offerIds)
                 .query((rs, row) -> new SupportOfferProfile(rs.getObject("id", UUID.class),
-                        rs.getString("title"), rs.getString("status")))
+                        rs.getObject("merchant_id", UUID.class), rs.getString("title"), rs.getString("status")))
                 .list();
     }
 
