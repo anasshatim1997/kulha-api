@@ -77,6 +77,7 @@ public class MerchantStaffService {
         boolean validate = canValidatePickups == null || canValidatePickups;
         boolean view = canViewOrders == null || canViewOrders;
         boolean offers = Boolean.TRUE.equals(canManageOffers);
+        lockMembershipMutations(staff.id());
         try {
             jdbc.sql("""
                     INSERT INTO merchant.merchant_memberships
@@ -120,6 +121,7 @@ public class MerchantStaffService {
     @Transactional
     public void remove(UUID ownerUserId, UUID staffUserId) {
         UUID merchantId = ownerMerchant(ownerUserId);
+        lockMembershipMutations(staffUserId);
         int removed = jdbc.sql("""
                 UPDATE merchant.merchant_memberships
                 SET status = 'REVOKED', updated_at = now()
@@ -131,6 +133,17 @@ public class MerchantStaffService {
                                WHERE user_id = :userId AND status = 'ACTIVE')
                 """).param("userId", staffUserId).query(Boolean.class).single();
         if (!hasAnotherActiveMembership) users.revokePickupStaff(staffUserId);
+    }
+
+    /**
+     * Serializes membership changes for one identity across all merchant tenants.
+     * The global MERCHANT_STAFF role must reflect whether any active membership exists.
+     */
+    private void lockMembershipMutations(UUID staffUserId) {
+        jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:userId, 0)) IS NULL")
+                .param("userId", staffUserId.toString())
+                .query(Boolean.class)
+                .single();
     }
 
     private UUID ownerMerchant(UUID ownerUserId) {
