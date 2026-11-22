@@ -23,6 +23,7 @@ class ModuleSqlBoundaryTest {
     void moduleSqlMayOnlyReferenceItsOwnSchema() throws IOException {
         for (String module : MODULES) {
             Path root = Path.of("src/main/java/ma/kulha", module);
+            if (!Files.exists(root)) continue;
             try (Stream<Path> paths = Files.walk(root)) {
                 List<Path> javaFiles = paths.filter(path -> path.toString().endsWith(".java")).toList();
                 for (Path file : javaFiles) {
