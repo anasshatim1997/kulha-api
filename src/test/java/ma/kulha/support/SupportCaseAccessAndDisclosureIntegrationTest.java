@@ -3,6 +3,7 @@ package ma.kulha.support;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -38,11 +39,31 @@ class SupportCaseAccessAndDisclosureIntegrationTest extends AbstractApiIntegrati
 
         mvc.perform(get("/api/v1/admin/support-cases/" + assigned)
                         .header("Authorization", bearer(support)))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.customerLabel").value(org.hamcrest.Matchers.not(customer.fullName())))
+                .andExpect(jsonPath("$.summary.email").doesNotExist());
 
         mvc.perform(get("/api/v1/admin/support-cases/" + notAssigned)
                         .header("Authorization", bearer(support)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void supportAgentCannotReassignCases() throws Exception {
+        User customer = createUser("assignment-customer@example.com", true);
+        User support = createUser("assignment-support@example.com", true, Role.SUPPORT);
+        String reference = createCase(customer);
+        assignDirectly(reference, support.id());
+        User otherSupport = createUser("assignment-other@example.com", true, Role.SUPPORT);
+
+        mvc.perform(put("/api/v1/admin/support-cases/" + reference + "/assignee")
+                        .header("Authorization", bearer(support))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\\"assignedTo\\":\\""+otherSupport.id()+"\\"}"))
+                .andExpect(status().isForbidden());
+
+        assertThat(jdbc.sql("SELECT assigned_to FROM admin.support_cases WHERE reference=:reference")
+                .param("reference", reference).query(UUID.class).single()).isEqualTo(support.id());
     }
 
     @Test
