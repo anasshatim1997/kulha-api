@@ -23,6 +23,11 @@ public interface IdentityApi {
     /** Active role names without exposing identity-domain types across module boundaries. */
     Set<String> findActiveRoleNames(UUID userId);
 
+    UserPreferences getUserPreferences(UUID userId, String defaultLocale);
+    UserPreferences updateUserPreferences(UUID userId, UserPreferences preferences);
+
+    record UserPreferences(String preferredCity, String preferredDistrict, String locale) {}
+
     record SupportUserSummary(UUID id, String fullName, boolean active) {}
     record SupportUserDetails(UUID id, String fullName, String email, String phone, boolean active) {}
 }
