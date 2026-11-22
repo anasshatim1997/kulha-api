@@ -78,6 +78,22 @@ class OfferApiService implements OfferApi {
                 .list();
     }
 
+    @Override
+    public MerchantDashboardOffers merchantDashboard(UUID merchantId, int limit) {
+        long liveOffers = jdbc.sql("SELECT count(*) FROM offer.offers WHERE merchant_id=:merchant AND status='PUBLISHED'")
+                .param("merchant", merchantId).query(Long.class).single();
+        List<MerchantOfferRow> rows = jdbc.sql("""
+                SELECT id, title, price_minor, quantity_total, quantity_reserved, status
+                FROM offer.offers
+                WHERE merchant_id=:merchant AND status IN ('PUBLISHED','DRAFT','UNPUBLISHED')
+                ORDER BY updated_at DESC, id LIMIT :limit
+                """).param("merchant", merchantId).param("limit", Math.clamp(limit, 1, 100))
+                .query((rs, row) -> new MerchantOfferRow(rs.getObject("id", UUID.class), rs.getString("title"),
+                        rs.getInt("price_minor"), rs.getInt("quantity_total"), rs.getInt("quantity_reserved"),
+                        rs.getString("status"))).list();
+        return new MerchantDashboardOffers(liveOffers, rows);
+    }
+
     private void publishSearchRefresh(UUID offerId) {
         OfferEventEnvelope event = new OfferEventEnvelope(UUID.randomUUID(), "OfferChanged", 1, clock.instant(),
                 offerId, MDC.get("correlationId"), Map.of("offerId", offerId));
