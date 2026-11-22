@@ -17,13 +17,14 @@ Build one Spring Boot application with one module per business domain:
 identity, merchant, offer, reservation, notification, payment, admin.
 
 - One PostgreSQL schema per module. No cross-schema joins or foreign keys.
+- Support is an admin subdomain, not a separate module: Java package `ma.kulha.admin.support`, persistence schema `admin`, and support tables owned by the admin module.
+- Cross-module references are scalar identifiers validated or resolved through the referenced module's public application API. Historical snapshots remain readable when the referenced live record is deactivated or deleted.
 - Support is an admin subdomain: its Java code lives under `ma.kulha.admin.support`, and its tables live in the `admin` schema.
 - Modules communicate only through their public `application` layer or through
   domain events. A module never uses another module's repositories, entities or
   infrastructure code. Cross-module collection reads use batch APIs or module-owned reporting projections to avoid N+1 lookups.
 - The `domain` layer does not depend on Spring or JPA.
-- These rules are enforced by ArchUnit tests (`ModuleBoundariesTest`) that run
-  in CI.
+- These rules are enforced by ArchUnit tests (`ModuleBoundariesTest`) and SQL/schema ownership tests that run in CI.
 - Availability and orders live in the same module (`reservation`) so that the
   stock decrement and the order creation happen in a single database
   transaction.
