@@ -64,9 +64,9 @@ class SupportCaseBatchQueryCountIntegrationTest extends AbstractApiIntegrationTe
             jdbc.sql("""
                     INSERT INTO admin.support_cases
                         (id, reference, category, subject, description, priority, status, customer_user_id,
-                         merchant_id, offer_id, assigned_to, created_at, updated_at)
+                         merchant_id, offer_id, reservation_reference, assigned_to, created_at, updated_at)
                     VALUES (:id, :reference, 'ORDER_ISSUE', :subject, 'A support issue', 'MEDIUM', 'OPEN',
-                            :customer, :merchant, :offer, :assignee, :now, :now)
+                            :customer, :merchant, :offer, :reservation, :assignee, :now, :now)
                     """).param("id", id).param("reference", "KLH-Q-" + id.toString().substring(0, 8))
                     .param("subject", "Issue " + i).param("customer", customerId).param("merchant", merchantId)
                     .param("offer", offerId).param("reservation", reservationReference).param("assignee", assigneeId)
