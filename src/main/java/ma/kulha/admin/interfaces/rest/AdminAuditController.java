@@ -31,9 +31,10 @@ public class AdminAuditController {
             @RequestParam(required = false) UUID actorId,
             @RequestParam(required = false) String action,
             @RequestParam(required = false) String result,
+            @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
-        return audit.list(from, to, actorId, action, result, page, size);
+        return audit.list(from, to, actorId, action, result, q, page, size);
     }
 
     @GetMapping(value = "/export", produces = "text/csv")
@@ -42,11 +43,12 @@ public class AdminAuditController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) UUID actorId,
             @RequestParam(required = false) String action,
-            @RequestParam(required = false) String result) {
+            @RequestParam(required = false) String result,
+            @RequestParam(required = false) String q) {
         UUID adminId = UUID.fromString(jwt.getSubject());
         StreamingResponseBody body = outputStream -> {
             var writer = new BufferedWriter(new OutputStreamWriter(outputStream, StandardCharsets.UTF_8));
-            audit.writeExport(adminId, from, to, actorId, action, result, writer);
+            audit.writeExport(adminId, from, to, actorId, action, result, q, writer);
             writer.flush();
         };
         return ResponseEntity.ok().contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
