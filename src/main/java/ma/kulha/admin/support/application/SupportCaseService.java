@@ -10,14 +10,13 @@ import java.util.Set;
 import java.util.UUID;
 import ma.kulha.admin.application.AuditApi;
 import ma.kulha.notification.application.NotificationOutbox;
-import ma.kulha.identity.domain.model.Role;
 import ma.kulha.identity.application.IdentityApi;
 import ma.kulha.merchant.application.MerchantApi;
 import ma.kulha.offer.application.OfferApi;
 import ma.kulha.reservation.application.ReservationSupportApi;
 import ma.kulha.offer.application.OfferApplicationService;
 import ma.kulha.shared.identity.UserAccountDirectory;
-import ma.kulha.support.interfaces.dto.OpenSupportCaseRequest;
+import ma.kulha.admin.support.interfaces.dto.OpenSupportCaseRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -126,10 +125,10 @@ public class SupportCaseService {
 
     @Transactional(readOnly = true)
     public CasePage list(UUID actorId, String status, String category, int page, int size) {
-        Set<Role> roles = userAccounts.findActiveRoles(actorId);
-        boolean support = roles.contains(Role.SUPPORT);
-        boolean administrator = roles.contains(Role.ADMIN);
-        boolean superAdministrator = roles.contains(Role.SUPER_ADMIN);
+        Set<String> roles = identities.findActiveRoleNames(actorId);
+        boolean support = roles.contains("SUPPORT");
+        boolean administrator = roles.contains("ADMIN");
+        boolean superAdministrator = roles.contains("SUPER_ADMIN");
         if (!support && !administrator && !superAdministrator) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Support workspace access denied.");
         int safePage = Math.max(0, page);
         int safeSize = Math.clamp(size, 1, 100);
@@ -206,7 +205,7 @@ public class SupportCaseService {
 
     @Transactional
     public void act(UUID adminId, String reference, String action, String reason) {
-        Set<Role> roles = userAccounts.findActiveRoles(adminId);
+        Set<String> roles = identities.findActiveRoleNames(adminId);
         CaseSummary item = requireCaseAccess(adminId, reference, roles);
         boolean supportOnly = roles.contains(Role.SUPPORT)
                 && !roles.contains(Role.ADMIN) && !roles.contains(Role.SUPER_ADMIN);
@@ -267,7 +266,7 @@ public class SupportCaseService {
         if (cleanReason.isEmpty() || cleanReason.length() > 500) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A disclosure reason is required.");
         }
-        Set<Role> roles = userAccounts.findActiveRoles(actorId);
+        Set<String> roles = identities.findActiveRoleNames(actorId);
         CaseSummary item = requireCaseAccess(actorId, reference, roles);
         boolean superAdministrator = roles.contains(Role.SUPER_ADMIN);
         boolean assignedSupport = !roles.contains(Role.ADMIN)
@@ -284,10 +283,10 @@ public class SupportCaseService {
     }
 
     private CaseSummary requireCaseAccess(UUID actorId, String reference) {
-        return requireCaseAccess(actorId, reference, userAccounts.findActiveRoles(actorId));
+        return requireCaseAccess(actorId, reference, identities.findActiveRoleNames(actorId));
     }
 
-    private CaseSummary requireCaseAccess(UUID actorId, String reference, Set<Role> roles) {
+    private CaseSummary requireCaseAccess(UUID actorId, String reference, Set<String> roles) {
         boolean superAdministrator = roles.contains(Role.SUPER_ADMIN);
         boolean administrator = roles.contains(Role.ADMIN);
         boolean support = roles.contains(Role.SUPPORT);
