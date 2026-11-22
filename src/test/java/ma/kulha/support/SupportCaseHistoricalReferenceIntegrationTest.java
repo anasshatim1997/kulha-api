@@ -37,6 +37,7 @@ class SupportCaseHistoricalReferenceIntegrationTest extends AbstractApiIntegrati
         var offer = offerApplicationService.create(owner.id(), "Historical basket", "Description",
                 OfferCategory.OTHER, 500, null, 2, Instant.now().plusSeconds(3600),
                 Instant.now().plusSeconds(7200), AllergensStatus.UNKNOWN, List.of(), null);
+        offerApplicationService.publish(owner.id(), offer.id());
         String reference = "KLH-C-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         var now = Instant.now().atOffset(java.time.ZoneOffset.UTC);
         jdbc.sql("""
