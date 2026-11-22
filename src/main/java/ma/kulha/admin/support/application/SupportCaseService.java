@@ -62,8 +62,8 @@ public class SupportCaseService {
     @Transactional
     public CaseDetail open(UUID customerId, OpenSupportCaseRequest request) {
         String category = request.category();
-        IdentityApi.SupportUserProfile customer = identities.findSupportProfile(customerId)
-                .filter(IdentityApi.SupportUserProfile::active)
+        IdentityApi.SupportUserSummary customer = identities.findSupportSummary(customerId)
+                .filter(IdentityApi.SupportUserSummary::active)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.GONE, "Customer account is no longer available."));
         ReservationSupportApi.ReservationReference reservation = null;
         if (request.reservationReference() != null && !request.reservationReference().isBlank()) {
@@ -177,8 +177,8 @@ public class SupportCaseService {
         CaseSummary item = requireCaseAccess(adminId, reference);
         String clean = message == null ? "" : message.trim();
         if (clean.isEmpty() || clean.length() > 3000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message is required.");
-        String actor = identities.findSupportProfile(adminId).filter(IdentityApi.SupportUserProfile::active)
-                .map(IdentityApi.SupportUserProfile::fullName).orElse("KULHA support");
+        String actor = identities.findSupportSummary(adminId).filter(IdentityApi.SupportUserSummary::active)
+                .map(IdentityApi.SupportUserSummary::fullName).orElse("KULHA support");
         appendTimeline(item.id(), "ADMIN", adminId, actor, sendToCustomer ? "CUSTOMER" : "INTERNAL", clean);
         if (sendToCustomer) {
             notifications.enqueue(item.customerUserId(), "SUPPORT_CASE_UPDATE",
@@ -224,7 +224,7 @@ public class SupportCaseService {
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
                                 "The linked shop is no longer active."));
                 UUID owner = merchant.ownerUserId();
-                if (identities.findSupportProfile(owner).filter(IdentityApi.SupportUserProfile::active).isEmpty()) {
+                if (identities.findSupportSummary(owner).filter(IdentityApi.SupportUserSummary::active).isEmpty()) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "The linked shop owner is no longer active.");
                 }
                 jdbc.sql("UPDATE admin.support_cases SET status='WAITING_REPLY', updated_at=:now WHERE id=:id")
@@ -275,7 +275,7 @@ public class SupportCaseService {
         if (!superAdministrator && !assignedSupport) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Customer disclosure is not permitted.");
         }
-        IdentityApi.SupportUserProfile profile = identities.findSupportProfile(item.customerUserId())
+        IdentityApi.SupportUserDetails profile = identities.findSupportDetails(item.customerUserId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.GONE, "Customer account is no longer available."));
         CustomerDetails details = new CustomerDetails(profile.fullName(), profile.email(), profile.phone());
         audit.append(actorId, "SUPPORT_CUSTOMER_DETAILS_REVEALED", "SUPPORT_CASE", reference, cleanReason, "SUCCESS");
@@ -309,8 +309,8 @@ public class SupportCaseService {
 
     private void appendTimeline(UUID caseId, String authorType, UUID authorUserId, String authorLabel,
                                 String visibility, String message) {
-        if (authorUserId != null && identities.findSupportProfile(authorUserId)
-                .filter(IdentityApi.SupportUserProfile::active).isEmpty()) {
+        if (authorUserId != null && identities.findSupportSummary(authorUserId)
+                .filter(IdentityApi.SupportUserSummary::active).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.GONE, "Timeline author account is no longer active.");
         }
         jdbc.sql("""
@@ -344,15 +344,15 @@ public class SupportCaseService {
             if (item.merchantId() != null) merchantIds.add(item.merchantId());
             if (item.offerId() != null) offerIds.add(item.offerId());
         }
-        java.util.Map<UUID, IdentityApi.SupportUserProfile> userProfiles = identities.findSupportProfiles(userIds)
-                .stream().collect(java.util.stream.Collectors.toMap(IdentityApi.SupportUserProfile::id, p -> p));
+        java.util.Map<UUID, IdentityApi.SupportUserSummary> userProfiles = identities.findSupportSummaries(userIds)
+                .stream().collect(java.util.stream.Collectors.toMap(IdentityApi.SupportUserSummary::id, p -> p));
         java.util.Map<UUID, MerchantApi.SupportMerchantProfile> merchantProfiles = merchants.findSupportProfiles(merchantIds)
                 .stream().collect(java.util.stream.Collectors.toMap(MerchantApi.SupportMerchantProfile::id, p -> p));
         java.util.Map<UUID, OfferApi.SupportOfferProfile> offerProfiles = offerApi.findSupportProfiles(offerIds)
                 .stream().collect(java.util.stream.Collectors.toMap(OfferApi.SupportOfferProfile::id, p -> p));
         return cases.stream().map(item -> {
-            IdentityApi.SupportUserProfile customer = userProfiles.get(item.customerUserId());
-            IdentityApi.SupportUserProfile assignee = item.assignedTo() == null ? null : userProfiles.get(item.assignedTo());
+            IdentityApi.SupportUserSummary customer = userProfiles.get(item.customerUserId());
+            IdentityApi.SupportUserSummary assignee = item.assignedTo() == null ? null : userProfiles.get(item.assignedTo());
             MerchantApi.SupportMerchantProfile merchant = item.merchantId() == null ? null : merchantProfiles.get(item.merchantId());
             OfferApi.SupportOfferProfile offer = item.offerId() == null ? null : offerProfiles.get(item.offerId());
             return new CaseSummary(item.id(), item.reference(), item.category(), item.subject(), item.description(),
