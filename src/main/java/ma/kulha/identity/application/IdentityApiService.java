@@ -13,7 +13,6 @@ import org.springframework.stereotype.Service;
 
 @Service
 class IdentityApiService implements IdentityApi {
-
     private final UserRepository users;
     private final JdbcClient jdbc;
 
@@ -22,46 +21,51 @@ class IdentityApiService implements IdentityApi {
         this.jdbc = jdbc;
     }
 
-    @Override
-    public boolean isEmailVerified(UUID userId) {
+    @Override public boolean isEmailVerified(UUID userId) {
         return users.findById(userId).map(User::isEmailVerified).orElse(false);
     }
-
-    @Override
-    public Optional<String> emailOf(UUID userId) {
+    @Override public Optional<String> emailOf(UUID userId) {
         return users.findById(userId).map(User::email);
     }
-
-    @Override
-    public void grantMerchantRole(UUID userId) {
+    @Override public void grantMerchantRole(UUID userId) {
         users.addRole(userId, Role.MERCHANT);
         users.addRole(userId, Role.MERCHANT_OWNER);
     }
-
-    @Override
-    public void revokeMerchantRole(UUID userId) {
+    @Override public void revokeMerchantRole(UUID userId) {
         users.removeRole(userId, Role.MERCHANT);
         users.removeRole(userId, Role.MERCHANT_OWNER);
     }
 
     @Override
-    public List<SupportUserProfile> findSupportProfiles(Collection<UUID> userIds) {
+    public List<SupportUserSummary> findSupportSummaries(Collection<UUID> userIds) {
         if (userIds == null || userIds.isEmpty()) return List.of();
         return jdbc.sql("""
-                SELECT id, full_name, email, phone, status
+                SELECT id, full_name, status
                 FROM identity.users
                 WHERE id IN (:ids)
                 """)
                 .param("ids", userIds)
-                .query((rs, row) -> new SupportUserProfile(rs.getObject("id", UUID.class),
-                        rs.getString("full_name"), rs.getString("email"), rs.getString("phone"),
-                        "ACTIVE".equals(rs.getString("status"))))
+                .query((rs, row) -> new SupportUserSummary(rs.getObject("id", UUID.class),
+                        rs.getString("full_name"), "ACTIVE".equals(rs.getString("status"))))
                 .list();
     }
 
     @Override
-    public Optional<SupportUserProfile> findSupportProfile(UUID userId) {
-        return findSupportProfiles(List.of(userId)).stream().findFirst();
+    public Optional<SupportUserSummary> findSupportSummary(UUID userId) {
+        return findSupportSummaries(List.of(userId)).stream().findFirst();
+    }
+
+    @Override
+    public Optional<SupportUserDetails> findSupportDetails(UUID userId) {
+        return jdbc.sql("""
+                SELECT id, full_name, email, phone, status
+                FROM identity.users
+                WHERE id=:id
+                """).param("id", userId)
+                .query((rs, row) -> new SupportUserDetails(rs.getObject("id", UUID.class),
+                        rs.getString("full_name"), rs.getString("email"), rs.getString("phone"),
+                        "ACTIVE".equals(rs.getString("status"))))
+                .optional();
     }
 
     @Override
