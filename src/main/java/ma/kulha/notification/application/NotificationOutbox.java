@@ -2,6 +2,10 @@ package ma.kulha.notification.application;
 
 import java.time.Instant;
 import java.util.UUID;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import ma.kulha.notification.domain.NotificationEvent;
 import ma.kulha.identity.application.IdentityApi;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -51,6 +55,31 @@ public class NotificationOutbox {
             throw new IllegalStateException("Could not serialize notification event", exception);
         }
     }
+
+    @Transactional(readOnly = true)
+    public Map<UUID, PickupReminderPreferences> findPickupReminderPreferences(Collection<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) return Map.of();
+        return jdbc.sql("""
+                SELECT user_id, pickup_reminders, reminder_minutes_before
+                FROM notification.notification_preferences
+                WHERE user_id IN (:ids)
+                """).param("ids", userIds)
+                .query((rs, row) -> Map.entry(rs.getObject("user_id", UUID.class),
+                        new PickupReminderPreferences(rs.getBoolean("pickup_reminders"),
+                                rs.getInt("reminder_minutes_before"))))
+                .list().stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Transactional
+    public boolean markPickupReminderDispatched(UUID reservationId) {
+        return jdbc.sql("""
+                INSERT INTO notification.pickup_reminder_dispatches (reservation_id)
+                VALUES (:reservationId)
+                ON CONFLICT (reservation_id) DO NOTHING
+                """).param("reservationId", reservationId).update() == 1;
+    }
+
+    public record PickupReminderPreferences(boolean enabled, int minutesBefore) {}
 
     private boolean shouldEmail(UUID userId, String type) {
         return jdbc.sql("""
