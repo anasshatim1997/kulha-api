@@ -150,7 +150,7 @@ class SupportCaseAssignmentAuthorizationIntegrationTest extends AbstractApiInteg
                 .orElse(null);
     }
 
-    private long auditCount(String reference) {
+    private long supportCaseAuditCount(String reference) {
         return jdbc.sql("""
                 SELECT count(*) FROM admin.audit_log
                 WHERE target_type='SUPPORT_CASE' AND target_id=:reference AND action='SUPPORT_CASE_ASSIGNED'
