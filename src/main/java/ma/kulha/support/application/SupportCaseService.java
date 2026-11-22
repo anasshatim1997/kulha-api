@@ -160,9 +160,20 @@ public class SupportCaseService {
     @Transactional
     public void assign(UUID adminId, String reference, UUID assignedTo) {
         CaseSummary item = get(reference).summary();
-        boolean exists = jdbc.sql("SELECT EXISTS(SELECT 1 FROM identity.users WHERE id=:id AND status='ACTIVE')")
+        boolean eligible = jdbc.sql("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM identity.users u
+                    JOIN identity.user_roles r ON r.user_id = u.id
+                    WHERE u.id = :id
+                      AND u.status = 'ACTIVE'
+                      AND r.role IN ('SUPPORT', 'ADMIN', 'SUPER_ADMIN')
+                )
+                """)
                 .param("id", assignedTo).query(Boolean.class).single();
-        if (!exists) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Active assignee not found.");
+        if (!eligible) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Eligible active assignee not found.");
+        }
         jdbc.sql("UPDATE admin.support_cases SET assigned_to=:assignee, updated_at=:now WHERE id=:id")
                 .param("assignee", assignedTo).param("now", clock.instant().atOffset(java.time.ZoneOffset.UTC))
                 .param("id", item.id()).update();
