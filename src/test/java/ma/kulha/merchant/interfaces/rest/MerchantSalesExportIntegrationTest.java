@@ -55,6 +55,36 @@ class MerchantSalesExportIntegrationTest extends AbstractApiIntegrationTest {
                 .doesNotContain("KLH-SALES-CANCELLED");
     }
 
+    @Test
+    void exportPaginatesMoreThanOneThousandCompletedReservationsWithoutDuplicates() throws Exception {
+        String merchantId = applyAs("sales-batch-owner@example.com", "Boulangerie Batch");
+        User owner = users.findByEmail("sales-batch-owner@example.com").orElseThrow();
+        User admin = createUser("sales-batch-admin@example.com", true, Role.ADMIN);
+        User customer = createUser("sales-batch-customer@example.com", true);
+        assertThat(doPostEmpty("/api/v1/admin/merchants/" + merchantId + "/approve", tokenFor(admin)).getStatus())
+                .isEqualTo(200);
+
+        jdbc.sql("""
+                INSERT INTO reservation.reservations
+                    (id, reference, customer_id, offer_id, merchant_id, offer_title, offer_category,
+                     merchant_name, merchant_address, merchant_city, pickup_start, pickup_end, pickup_code,
+                     quantity, unit_price_minor, total_price_minor, status, created_at, updated_at)
+                SELECT gen_random_uuid(), 'KLH-BATCH-' || n, :customer, gen_random_uuid(), :merchant,
+                       'Panier du fournil', 'BAKERY', 'Boulangerie Batch', '12 rue des Fleurs', 'Casablanca',
+                       '2026-11-04T12:00:00Z', '2026-11-04T13:00:00Z', '123456',
+                       1, 1500, 1500, 'COMPLETED', '2026-11-01T12:00:00Z', '2026-11-02T12:00:00Z'
+                FROM generate_series(1, 1001) AS series(n)
+                """)
+                .param("customer", customer.id())
+                .param("merchant", UUID.fromString(merchantId))
+                .update();
+
+        String csv = operations.exportSales(owner.id(), LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 2));
+
+        assertThat(csv.split("\\\\R")).hasSize(1002);
+        assertThat(csv).contains("KLH-BATCH-1").contains("KLH-BATCH-1001");
+    }
+
     private void insertReservation(UUID merchantId, UUID customerId, String reference,
                                    String offerTitle, String status, String createdAt, String updatedAt) {
         jdbc.sql("""
