@@ -28,7 +28,7 @@ class ReservationReminderApiService implements ReservationReminderApi {
                 WHERE status = 'CONFIRMED'
                   AND pickup_start > :now
                   AND pickup_start <= :pickupBefore
-                  AND (:afterPickupStart IS NULL
+                  AND (CAST(:afterPickupStart AS timestamptz) IS NULL
                        OR pickup_start > :afterPickupStart
                        OR (pickup_start = :afterPickupStart AND id > :afterReservationId))
                 ORDER BY pickup_start, id
