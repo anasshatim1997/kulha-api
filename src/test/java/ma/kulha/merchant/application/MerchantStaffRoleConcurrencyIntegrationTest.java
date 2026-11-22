@@ -11,6 +11,7 @@ import ma.kulha.merchant.domain.model.BusinessType;
 import ma.kulha.merchant.domain.model.Merchant;
 import ma.kulha.support.AbstractApiIntegrationTest;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.beans.factory.annotation.Autowired;
 
 class MerchantStaffRoleConcurrencyIntegrationTest extends AbstractApiIntegrationTest {
@@ -37,9 +38,23 @@ class MerchantStaffRoleConcurrencyIntegrationTest extends AbstractApiIntegration
         for (int round = 0; round < 6; round++) {
             User removeOwner = round % 2 == 0 ? ownerA : ownerB;
             User addOwner = round % 2 == 0 ? ownerB : ownerA;
-            runConcurrently(
+            boolean addSucceeded = runConcurrently(
                     () -> staffService.remove(removeOwner.id(), staff.id()),
-                    () -> staffService.addPickupStaff(addOwner.id(), staff.email(), true, true, false));
+                    () -> {
+                        try {
+                            staffService.addPickupStaff(addOwner.id(), staff.email(), true, true, false);
+                            return true;
+                        } catch (ResponseStatusException conflict) {
+                            if (conflict.getStatusCode().value() != 409) throw conflict;
+                            return false;
+                        }
+                    });
+            // If the add acquired the user lock before the old membership was revoked,
+            // the unique active-membership constraint correctly rejects it. Retry only
+            // after both concurrent transactions have completed and released their locks.
+            if (!addSucceeded) {
+                staffService.addPickupStaff(addOwner.id(), staff.email(), true, true, false);
+            }
 
             boolean hasActiveMembership = jdbc.sql("""
                     SELECT EXISTS (SELECT 1 FROM merchant.merchant_memberships
@@ -66,15 +81,15 @@ class MerchantStaffRoleConcurrencyIntegrationTest extends AbstractApiIntegration
                 phone, "Lun-Sam 7h-20h");
     }
 
-    private void runConcurrently(ThrowingRunnable first, ThrowingRunnable second) throws Exception {
+    private boolean runConcurrently(ThrowingRunnable first, ThrowingSupplier<Boolean> second) throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
         try {
             var a = executor.submit(() -> { start.await(); first.run(); return null; });
-            var b = executor.submit(() -> { start.await(); second.run(); return null; });
+            var b = executor.submit(() -> { start.await(); return second.get(); });
             start.countDown();
             a.get(20, TimeUnit.SECONDS);
-            b.get(20, TimeUnit.SECONDS);
+            return b.get(20, TimeUnit.SECONDS);
         } finally {
             executor.shutdownNow();
             executor.awaitTermination(5, TimeUnit.SECONDS);
@@ -84,5 +99,10 @@ class MerchantStaffRoleConcurrencyIntegrationTest extends AbstractApiIntegration
     @FunctionalInterface
     private interface ThrowingRunnable {
         void run() throws Exception;
+    }
+
+    @FunctionalInterface
+    private interface ThrowingSupplier<T> {
+        T get() throws Exception;
     }
 }
