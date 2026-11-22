@@ -30,7 +30,7 @@ class SupportCaseAssignmentAuthorizationIntegrationTest extends AbstractApiInteg
 
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(assignedTo(reference)).isEqualTo(support.id());
-        assertThat(auditCount(reference)).isEqualTo(1);
+        assertThat(supportCaseAuditCount(reference)).isEqualTo(1);
         assertThat(timelineCount(reference)).isEqualTo(1);
     }
 
@@ -45,7 +45,7 @@ class SupportCaseAssignmentAuthorizationIntegrationTest extends AbstractApiInteg
 
         assertThat(response.getStatus()).isEqualTo(404);
         assertThat(assignedTo(reference)).isNull();
-        assertThat(auditCount(reference)).isZero();
+        assertThat(supportCaseAuditCount(reference)).isZero();
         assertThat(timelineCount(reference)).isZero();
     }
 
@@ -60,7 +60,7 @@ class SupportCaseAssignmentAuthorizationIntegrationTest extends AbstractApiInteg
 
         assertThat(response.getStatus()).isEqualTo(404);
         assertThat(assignedTo(reference)).isNull();
-        assertThat(auditCount(reference)).isZero();
+        assertThat(supportCaseAuditCount(reference)).isZero();
     }
 
     @Test
@@ -75,7 +75,7 @@ class SupportCaseAssignmentAuthorizationIntegrationTest extends AbstractApiInteg
 
         assertThat(response.getStatus()).isEqualTo(404);
         assertThat(assignedTo(reference)).isNull();
-        assertThat(auditCount(reference)).isZero();
+        assertThat(supportCaseAuditCount(reference)).isZero();
     }
 
     @Test
@@ -88,7 +88,7 @@ class SupportCaseAssignmentAuthorizationIntegrationTest extends AbstractApiInteg
 
         assertThat(response.getStatus()).isEqualTo(404);
         assertThat(assignedTo(reference)).isNull();
-        assertThat(auditCount(reference)).isZero();
+        assertThat(supportCaseAuditCount(reference)).isZero();
     }
 
     @Test
@@ -102,7 +102,7 @@ class SupportCaseAssignmentAuthorizationIntegrationTest extends AbstractApiInteg
 
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(assignedTo(reference)).isEqualTo(assignee.id());
-        assertThat(auditCount(reference)).isEqualTo(1);
+        assertThat(supportCaseAuditCount(reference)).isEqualTo(1);
     }
 
     @Test
@@ -114,7 +114,7 @@ class SupportCaseAssignmentAuthorizationIntegrationTest extends AbstractApiInteg
         assertThat(assign(reference, ordinaryUser.id(), tokenFor(ordinaryUser)).getStatus()).isEqualTo(403);
         assertThat(assign(reference, ordinaryUser.id(), null).getStatus()).isEqualTo(401);
         assertThat(assignedTo(reference)).isNull();
-        assertThat(auditCount(reference)).isZero();
+        assertThat(supportCaseAuditCount(reference)).isZero();
     }
 
     private MockHttpServletResponse assign(String reference, UUID assignee, String token) throws Exception {
