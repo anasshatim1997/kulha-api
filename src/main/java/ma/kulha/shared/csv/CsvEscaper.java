@@ -20,7 +20,8 @@ public final class CsvEscaper {
         int firstMeaningful = 0;
         while (firstMeaningful < value.length()
                 && (Character.isWhitespace(value.charAt(firstMeaningful))
-                || Character.isISOControl(value.charAt(firstMeaningful)))) {
+                || Character.isISOControl(value.charAt(firstMeaningful))
+                || value.charAt(firstMeaningful) == '\uFEFF')) {
             firstMeaningful++;
         }
 
