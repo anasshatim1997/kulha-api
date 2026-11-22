@@ -12,6 +12,8 @@ import ma.kulha.merchant.domain.model.Merchant;
 import ma.kulha.offer.application.OfferApplicationService;
 import ma.kulha.offer.domain.model.AllergensStatus;
 import ma.kulha.offer.domain.model.OfferCategory;
+import ma.kulha.reservation.domain.model.Reservation;
+import ma.kulha.reservation.domain.repository.ReservationRepository;
 import ma.kulha.admin.support.application.SupportCaseService;
 import net.ttddyy.dsproxy.QueryCountHolder;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,7 @@ class SupportCaseBatchQueryCountIntegrationTest extends AbstractApiIntegrationTe
     @Autowired MerchantService merchantService;
     @Autowired OfferApplicationService offerService;
     @Autowired SupportCaseService supportCases;
+    @Autowired ReservationRepository reservationRepository;
 
     @Test
     void supportCaseListUsesConstantQueryCountForOneAndManyRows() {
@@ -38,17 +41,23 @@ class SupportCaseBatchQueryCountIntegrationTest extends AbstractApiIntegrationTe
                 500, null, 2, Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200),
                 AllergensStatus.UNKNOWN, java.util.List.of(), null);
         offerService.publish(owner.id(), offer.id());
+        Instant now = Instant.now();
+        String reservationReference = "KLH-R-QCOUNT";
+        reservationRepository.insert(Reservation.pending(UUID.randomUUID(), reservationReference, customer.id(),
+                offer.id(), merchant.id(), "Query Count Basket", "OTHER", "Query Count Bakery",
+                "12 rue Atlas", "Casablanca", null, now.plusSeconds(3600), now.plusSeconds(7200),
+                "QCOUNT123", 1, 500, now));
 
-        insertCases(customer.id(), support.id(), merchant.id(), offer.id(), 25);
+        insertCases(customer.id(), support.id(), merchant.id(), offer.id(), reservationReference, 25);
 
         long oneRowQueries = countQueries(admin.id(), 1);
         long twentyFiveRowQueries = countQueries(admin.id(), 25);
 
-        assertThat(oneRowQueries).isEqualTo(6);
+        assertThat(oneRowQueries).isEqualTo(7);
         assertThat(twentyFiveRowQueries).isEqualTo(oneRowQueries);
     }
 
-    private void insertCases(UUID customerId, UUID assigneeId, UUID merchantId, UUID offerId, int count) {
+    private void insertCases(UUID customerId, UUID assigneeId, UUID merchantId, UUID offerId, String reservationReference, int count) {
         Instant now = Instant.now();
         for (int i = 0; i < count; i++) {
             UUID id = UUID.randomUUID();
@@ -60,7 +69,7 @@ class SupportCaseBatchQueryCountIntegrationTest extends AbstractApiIntegrationTe
                             :customer, :merchant, :offer, :assignee, :now, :now)
                     """).param("id", id).param("reference", "KLH-Q-" + id.toString().substring(0, 8))
                     .param("subject", "Issue " + i).param("customer", customerId).param("merchant", merchantId)
-                    .param("offer", offerId).param("assignee", assigneeId)
+                    .param("offer", offerId).param("reservation", reservationReference).param("assignee", assigneeId)
                     .param("now", now.atOffset(java.time.ZoneOffset.UTC)).update();
         }
     }
