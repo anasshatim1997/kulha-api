@@ -35,6 +35,14 @@ public class IdentityUserAccountDirectory implements UserAccountDirectory {
                 .isPresent();
     }
 
+    @Override
+    public boolean hasActiveRole(UUID userId, Role role) {
+        return users.findById(userId)
+                .filter(user -> user.status() == UserStatus.ACTIVE)
+                .filter(user -> user.hasRole(role))
+                .isPresent();
+    }
+
     private Account toAccount(User user) {
         return new Account(user.id(), user.email(), user.fullName(),
                 user.status() == UserStatus.ACTIVE, user.isEmailVerified(),
