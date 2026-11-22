@@ -13,6 +13,7 @@ import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 class NotificationOutboxRelayIntegrationTest extends AbstractApiIntegrationTest {
 
@@ -27,6 +28,7 @@ class NotificationOutboxRelayIntegrationTest extends AbstractApiIntegrationTest 
         NotificationOutboxRelay relay = new NotificationOutboxRelay(jdbc, rabbit, transactionManager);
 
         doAnswer(invocation -> {
+            assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
             CorrelationData correlation = invocation.getArgument(3);
             correlation.getFuture().complete(new CorrelationData.Confirm(false, "broker nack"));
             return null;
