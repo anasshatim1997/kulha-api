@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import ma.kulha.shared.csv.CsvEscaper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,18 +59,15 @@ public class AdminAuditQueryService {
         AuditPage page = list(from, to, actorId, action, result, 0, 5000);
         StringBuilder csv = new StringBuilder("time,actor,action,record,reason,result,correlation_id\n");
         for (AuditRow row : page.items()) {
-            csv.append(row.createdAt()).append(',').append(csv(row.actorName())).append(',')
-                    .append(csv(row.action())).append(',')
-                    .append(csv(row.targetType() + " · " + row.targetId())).append(',')
-                    .append(csv(row.reason())).append(',').append(csv(row.result())).append(',')
-                    .append(csv(row.correlationId())).append('\n');
+            csv.append(row.createdAt()).append(',').append(CsvEscaper.cell(row.actorName())).append(',')
+                    .append(CsvEscaper.cell(row.action())).append(',')
+                    .append(CsvEscaper.cell(row.targetType() + " · " + row.targetId())).append(',')
+                    .append(CsvEscaper.cell(row.reason())).append(',').append(CsvEscaper.cell(row.result())).append(',')
+                    .append(CsvEscaper.cell(row.correlationId())).append('\n');
         }
         return csv.toString();
     }
 
-    private static String csv(String value) {
-        return "\"" + (value == null ? "" : value.replace("\"", "\"\"")) + "\"";
-    }
     public record AuditRow(UUID id, UUID actorUserId, String actorName, String action, String targetType,
                            String targetId, String reason, String result, String correlationId,
                            java.time.Instant createdAt) {}
