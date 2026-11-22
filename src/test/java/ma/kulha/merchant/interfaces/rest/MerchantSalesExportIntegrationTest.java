@@ -81,7 +81,7 @@ class MerchantSalesExportIntegrationTest extends AbstractApiIntegrationTest {
 
         String csv = operations.exportSales(owner.id(), LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 2));
 
-        assertThat(csv.split("\\\\R")).hasSize(1002);
+        assertThat(csv.split("\\R")).hasSize(1002);
         assertThat(csv).contains("KLH-BATCH-1").contains("KLH-BATCH-1001");
     }
 
