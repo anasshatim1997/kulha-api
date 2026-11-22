@@ -1,6 +1,7 @@
 package ma.kulha.shared.identity;
 
 import java.util.Optional;
+import java.util.Set;
 import ma.kulha.identity.domain.model.Role;
 import java.util.UUID;
 
@@ -12,8 +13,8 @@ public interface UserAccountDirectory {
     /** True only for active users authorized to handle support cases. */
     boolean isEligibleSupportCaseAssignee(UUID userId);
 
-    /** Active-account role lookup owned by the identity module. */
-    boolean hasActiveRole(UUID userId, Role role);
+    /** Active-account roles, resolved in one identity-module lookup. */
+    Set<Role> findActiveRoles(UUID userId);
     void grantPickupStaff(UUID userId);
     void revokePickupStaff(UUID userId);
 
