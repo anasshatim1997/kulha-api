@@ -189,8 +189,8 @@ public class SupportCaseService {
 
     @Transactional
     public void act(UUID adminId, String reference, String action, String reason) {
-        CaseSummary item = requireCaseAccess(adminId, reference);
         Set<Role> roles = userAccounts.findActiveRoles(adminId);
+        CaseSummary item = requireCaseAccess(adminId, reference, roles);
         boolean supportOnly = roles.contains(Role.SUPPORT)
                 && !roles.contains(Role.ADMIN) && !roles.contains(Role.SUPER_ADMIN);
         if (supportOnly && "KEEP_OFFER_HIDDEN".equals(action)) {
@@ -240,8 +240,8 @@ public class SupportCaseService {
         if (cleanReason.isEmpty() || cleanReason.length() > 500) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A disclosure reason is required.");
         }
-        CaseSummary item = requireCaseAccess(actorId, reference);
         Set<Role> roles = userAccounts.findActiveRoles(actorId);
+        CaseSummary item = requireCaseAccess(actorId, reference, roles);
         boolean superAdministrator = roles.contains(Role.SUPER_ADMIN);
         boolean assignedSupport = !roles.contains(Role.ADMIN)
                 && !superAdministrator && roles.contains(Role.SUPPORT)
