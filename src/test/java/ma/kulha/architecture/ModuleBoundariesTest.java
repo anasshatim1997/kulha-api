@@ -7,6 +7,7 @@ import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
 import java.util.List;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
@@ -16,6 +17,12 @@ class ModuleBoundariesTest {
     private static final List<String> MODULES = List.of(
             "identity", "merchant", "offer", "reservation",
             "notification", "payment", "admin");
+
+    @ArchTest
+    static void support_code_is_owned_by_admin(JavaClasses classes) {
+        assertThat(classes).noneMatch(javaClass -> javaClass.getPackageName().startsWith("ma.kulha.support."));
+        assertThat(classes).anyMatch(javaClass -> javaClass.getPackageName().startsWith("ma.kulha.admin.support."));
+    }
 
     // The domain layer must stay free of Spring and JPA.
     @ArchTest
