@@ -25,6 +25,7 @@ public interface IdentityApi {
     Set<String> findActiveRoleNames(UUID userId);
 
     Map<UUID, String> findLocales(Collection<UUID> userIds);
+    Map<UUID, String> findEmailsForNotifications(Collection<UUID> userIds);
 
     UserPreferences getUserPreferences(UUID userId, String defaultLocale);
     UserPreferences updateUserPreferences(UUID userId, UserPreferences preferences);
