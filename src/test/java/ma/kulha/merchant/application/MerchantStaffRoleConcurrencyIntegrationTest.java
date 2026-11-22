@@ -45,6 +45,11 @@ class MerchantStaffRoleConcurrencyIntegrationTest extends AbstractApiIntegration
                     SELECT EXISTS (SELECT 1 FROM merchant.merchant_memberships
                                    WHERE user_id=:userId AND status='ACTIVE')
                     """).param("userId", staff.id()).query(Boolean.class).single();
+            long activeMembershipCount = jdbc.sql("""
+                    SELECT count(*) FROM merchant.merchant_memberships
+                    WHERE user_id=:userId AND status='ACTIVE'
+                    """).param("userId", staff.id()).query(Long.class).single();
+            assertThat(activeMembershipCount).isEqualTo(1);
             boolean hasGlobalRole = jdbc.sql("""
                     SELECT EXISTS (SELECT 1 FROM identity.user_roles
                                    WHERE user_id=:userId AND role='MERCHANT_STAFF')
