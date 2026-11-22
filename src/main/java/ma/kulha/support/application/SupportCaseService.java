@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import ma.kulha.admin.application.AuditApi;
 import ma.kulha.notification.application.NotificationOutbox;
@@ -109,9 +110,10 @@ public class SupportCaseService {
 
     @Transactional(readOnly = true)
     public CasePage list(UUID actorId, String status, String category, int page, int size) {
-        boolean support = userAccounts.hasActiveRole(actorId, Role.SUPPORT);
-        boolean administrator = userAccounts.hasActiveRole(actorId, Role.ADMIN);
-        boolean superAdministrator = userAccounts.hasActiveRole(actorId, Role.SUPER_ADMIN);
+        Set<Role> roles = userAccounts.findActiveRoles(actorId);
+        boolean support = roles.contains(Role.SUPPORT);
+        boolean administrator = roles.contains(Role.ADMIN);
+        boolean superAdministrator = roles.contains(Role.SUPER_ADMIN);
         if (!support && !administrator && !superAdministrator) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Support workspace access denied.");
         int safePage = Math.max(0, page);
         int safeSize = Math.clamp(size, 1, 100);
@@ -188,9 +190,9 @@ public class SupportCaseService {
     @Transactional
     public void act(UUID adminId, String reference, String action, String reason) {
         CaseSummary item = requireCaseAccess(adminId, reference);
-        boolean supportOnly = userAccounts.hasActiveRole(adminId, Role.SUPPORT)
-                && !userAccounts.hasActiveRole(adminId, Role.ADMIN)
-                && !userAccounts.hasActiveRole(adminId, Role.SUPER_ADMIN);
+        Set<Role> roles = userAccounts.findActiveRoles(adminId);
+        boolean supportOnly = roles.contains(Role.SUPPORT)
+                && !roles.contains(Role.ADMIN) && !roles.contains(Role.SUPER_ADMIN);
         if (supportOnly && "KEEP_OFFER_HIDDEN".equals(action)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Offer moderation is not part of support-agent access.");
         }
@@ -239,9 +241,10 @@ public class SupportCaseService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A disclosure reason is required.");
         }
         CaseSummary item = requireCaseAccess(actorId, reference);
-        boolean superAdministrator = userAccounts.hasActiveRole(actorId, Role.SUPER_ADMIN);
-        boolean assignedSupport = !userAccounts.hasActiveRole(actorId, Role.ADMIN)
-                && !superAdministrator && userAccounts.hasActiveRole(actorId, Role.SUPPORT)
+        Set<Role> roles = userAccounts.findActiveRoles(actorId);
+        boolean superAdministrator = roles.contains(Role.SUPER_ADMIN);
+        boolean assignedSupport = !roles.contains(Role.ADMIN)
+                && !superAdministrator && roles.contains(Role.SUPPORT)
                 && actorId.equals(item.assignedTo());
         if (!superAdministrator && !assignedSupport) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Customer disclosure is not permitted.");
@@ -255,9 +258,13 @@ public class SupportCaseService {
     }
 
     private CaseSummary requireCaseAccess(UUID actorId, String reference) {
-        boolean superAdministrator = userAccounts.hasActiveRole(actorId, Role.SUPER_ADMIN);
-        boolean administrator = userAccounts.hasActiveRole(actorId, Role.ADMIN);
-        boolean support = userAccounts.hasActiveRole(actorId, Role.SUPPORT);
+        return requireCaseAccess(actorId, reference, userAccounts.findActiveRoles(actorId));
+    }
+
+    private CaseSummary requireCaseAccess(UUID actorId, String reference, Set<Role> roles) {
+        boolean superAdministrator = roles.contains(Role.SUPER_ADMIN);
+        boolean administrator = roles.contains(Role.ADMIN);
+        boolean support = roles.contains(Role.SUPPORT);
         if (!superAdministrator && !administrator && !support) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Support case access denied.");
         }
@@ -269,7 +276,8 @@ public class SupportCaseService {
     }
 
     private void requireAdministrator(UUID actorId) {
-        if (!userAccounts.hasActiveRole(actorId, Role.ADMIN) && !userAccounts.hasActiveRole(actorId, Role.SUPER_ADMIN)) {
+        Set<Role> roles = userAccounts.findActiveRoles(actorId);
+        if (!roles.contains(Role.ADMIN) && !roles.contains(Role.SUPER_ADMIN)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Administrative support access required.");
         }
     }
