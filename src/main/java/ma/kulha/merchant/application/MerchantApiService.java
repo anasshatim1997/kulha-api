@@ -56,4 +56,17 @@ class MerchantApiService implements MerchantApi {
                 .map(m -> new MerchantPublicProfile(m.id(), m.name(), m.address(), m.city(), m.district(),
                         m.pickupInstructions(), m.latitude(), m.longitude())).toList();
     }
+
+    @Override public List<SupportMerchantProfile> findSupportProfiles(Collection<UUID> merchantIds) {
+        if (merchantIds == null || merchantIds.isEmpty()) return List.of();
+        return jdbc.sql("""
+                SELECT id, owner_user_id, name, city, status
+                FROM merchant.merchants
+                WHERE id IN (:ids)
+                """)
+                .param("ids", merchantIds)
+                .query((rs, row) -> new SupportMerchantProfile(rs.getObject("id", UUID.class),
+                        rs.getObject("owner_user_id", UUID.class), rs.getString("name"), rs.getString("city"), rs.getString("status")))
+                .list();
+    }
 }

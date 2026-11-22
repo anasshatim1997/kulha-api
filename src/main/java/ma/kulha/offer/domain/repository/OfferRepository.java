@@ -24,5 +24,7 @@ public interface OfferRepository {
     boolean releaseUnits(UUID offerId, int units);
     List<Offer> expireBatch(Instant now, int limit);
     List<Offer> findPublishedByMerchant(UUID merchantId);
+    List<Offer> listForAdminModeration(OfferStatus status, int limit, int offset);
+    long countForAdminModeration(OfferStatus status);
     Optional<PublicOfferRow> findPublicById(UUID id, Instant reservableAfter);
 }

@@ -44,6 +44,7 @@ public abstract class AbstractApiIntegrationTest {
 
     @BeforeEach
     protected void resetState() {
+        jdbc.sql("DELETE FROM admin.support_cases").update();
         mvc = MockMvcBuilders.webAppContextSetup(context).addFilters(correlationIdFilter)
                 .apply(springSecurity()).build();
         jdbc.sql("DELETE FROM reservation.cancellation_events").update();

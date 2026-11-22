@@ -1,8 +1,8 @@
-package ma.kulha.support.interfaces.rest;
+package ma.kulha.admin.support.interfaces.rest;
 
 import java.util.UUID;
-import ma.kulha.support.application.SupportCaseService;
-import ma.kulha.support.interfaces.dto.OpenSupportCaseRequest;
+import ma.kulha.admin.support.application.SupportCaseService;
+import ma.kulha.admin.support.interfaces.dto.OpenSupportCaseRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
