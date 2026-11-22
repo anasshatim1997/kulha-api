@@ -100,8 +100,6 @@ public class SupportCaseService {
                 .param("offer", offerId).param("reservation", reservation == null ? null : reservation.reference())
                 .param("hidden", hideOffer).param("now", now.atOffset(java.time.ZoneOffset.UTC)).update();
 
-        String customerName = jdbc.sql("SELECT full_name FROM identity.users WHERE id=:id")
-                .param("id", customerId).query(String.class).single();
         appendTimeline(id, "CUSTOMER", customerId, "Customer", "CUSTOMER", request.description().trim());
         if (hideOffer) appendTimeline(id, "SYSTEM", null, "KULHA!", "INTERNAL",
                 "The offer was hidden from customers while the food-safety case is reviewed.");
