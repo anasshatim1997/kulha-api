@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 @Component
@@ -27,8 +28,12 @@ class EmailDeliveryConsumer {
     }
 
     @RabbitListener(queues = NotificationMessagingConfig.EMAIL_QUEUE)
+    @Transactional
     void deliver(String payload) throws Exception {
         EmailDeliveryEvent event = mapper.readValue(payload, EmailDeliveryEvent.class);
+        jdbc.sql("""
+                SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtextextended(:eventId, 0))) event_delivery_lock
+                """).param("eventId", event.id().toString()).query(Integer.class).single();
         boolean alreadyDelivered = jdbc.sql("""
                 SELECT EXISTS (SELECT 1 FROM notification.email_delivery_receipts WHERE event_id = :eventId)
                 """).param("eventId", event.id()).query(Boolean.class).single();

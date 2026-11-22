@@ -1,6 +1,5 @@
 package ma.kulha.notification.infrastructure.messaging;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -58,7 +57,7 @@ class NotificationOutboxRelay {
                 }
                 jdbc.sql("""
                         UPDATE notification.outbox_events
-                        SET published_at = now(), attempt_count = attempt_count + 1, last_error = NULL,
+                        SET published_at = now(), attempt_count = attempt_count + 1,
                             payload = CASE WHEN event_type = 'email.requested' THEN '{}'::jsonb ELSE payload END
                         WHERE id = :id
                         """).param("id", row.id()).update();
@@ -68,23 +67,22 @@ class NotificationOutboxRelay {
                 if (attempts >= MAX_ATTEMPTS) {
                     jdbc.sql("""
                             UPDATE notification.outbox_events
-                            SET attempt_count = :attempts, dead_lettered_at = now(), last_error = :error,
+                            SET attempt_count = :attempts, dead_lettered_at = now(),
                                 payload = CASE WHEN event_type = 'email.requested' THEN '{}'::jsonb ELSE payload END
                             WHERE id = :id
-                            """).param("attempts", attempts).param("error", message).param("id", row.id()).update();
+                            """).param("attempts", attempts).param("id", row.id()).update();
                     log.error("Outbox event {} moved to dead letter after {} attempts ({})",
-                            row.id(), attempts, message);
+                            row.id(), attempts, message, failure);
                 } else {
                     long delaySeconds = Math.min(900, 1L << Math.min(attempts, 9));
                     jdbc.sql("""
                             UPDATE notification.outbox_events
                             SET attempt_count = :attempts,
-                                available_at = now() + (:delaySeconds * interval '1 second'),
-                                last_error = :error
+                                available_at = now() + (:delaySeconds * interval '1 second')
                             WHERE id = :id
                             """).param("attempts", attempts).param("delaySeconds", delaySeconds)
-                            .param("error", message).param("id", row.id()).update();
-                    log.warn("Outbox event {} will retry in {} seconds ({})", row.id(), delaySeconds, message);
+                            .param("id", row.id()).update();
+                    log.warn("Outbox event {} will retry in {} seconds ({})", row.id(), delaySeconds, message, failure);
                 }
             }
         }
