@@ -1,4 +1,4 @@
-package ma.kulha.support.interfaces.dto;
+package ma.kulha.admin.support.interfaces.dto;
 
 import jakarta.validation.constraints.NotNull;
 import java.util.UUID;

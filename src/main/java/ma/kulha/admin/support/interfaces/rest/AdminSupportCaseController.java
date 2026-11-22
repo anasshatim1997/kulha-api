@@ -1,12 +1,12 @@
-package ma.kulha.support.interfaces.rest;
+package ma.kulha.admin.support.interfaces.rest;
 
 import java.util.UUID;
 import jakarta.validation.Valid;
-import ma.kulha.support.application.SupportCaseService;
-import ma.kulha.support.interfaces.dto.AssignSupportCaseRequest;
-import ma.kulha.support.interfaces.dto.SupportCaseActionRequest;
-import ma.kulha.support.interfaces.dto.SupportCaseMessageRequest;
-import ma.kulha.support.interfaces.dto.RevealSupportCustomerRequest;
+import ma.kulha.admin.support.application.SupportCaseService;
+import ma.kulha.admin.support.interfaces.dto.AssignSupportCaseRequest;
+import ma.kulha.admin.support.interfaces.dto.SupportCaseActionRequest;
+import ma.kulha.admin.support.interfaces.dto.SupportCaseMessageRequest;
+import ma.kulha.admin.support.interfaces.dto.RevealSupportCustomerRequest;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;

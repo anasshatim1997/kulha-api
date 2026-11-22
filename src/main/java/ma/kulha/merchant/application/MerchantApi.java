@@ -12,4 +12,9 @@ public interface MerchantApi extends MerchantPublicApi {
     Optional<UUID> resolveActingMerchant(UUID userId);
     boolean can(UUID userId, UUID merchantId, String permission);
     void lockForOfferMutation(UUID merchantId);
+
+    /** Batch-resolves historical merchant references, including non-approved merchants. */
+    List<SupportMerchantProfile> findSupportProfiles(Collection<UUID> merchantIds);
+
+    record SupportMerchantProfile(UUID id, UUID ownerUserId, String name, String city, String status) {}
 }

@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.UUID;
 import ma.kulha.shared.web.PageResponse;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import ma.kulha.identity.application.IdentityApi;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
@@ -29,9 +30,11 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 public class NotificationController {
     private final JdbcClient jdbc;
+    private final IdentityApi identity;
 
-    NotificationController(JdbcClient jdbc) {
+    NotificationController(JdbcClient jdbc, IdentityApi identity) {
         this.jdbc = jdbc;
+        this.identity = identity;
     }
 
     @GetMapping("/api/v1/notifications")
@@ -165,41 +168,17 @@ public class NotificationController {
     UserPreferences userPreferences(
             @RequestParam(defaultValue = "fr") @Pattern(regexp = "fr|en|ar") String locale,
             Authentication authentication) {
-        UUID userId = userId(authentication);
-        jdbc.sql("""
-                INSERT INTO identity.user_preferences (user_id, locale)
-                VALUES (:userId, :locale) ON CONFLICT (user_id) DO NOTHING
-                """)
-                .param("userId", userId).param("locale", locale).update();
-        return jdbc.sql("""
-                SELECT preferred_city, preferred_district, locale
-                FROM identity.user_preferences WHERE user_id = :userId
-                """)
-                .param("userId", userId)
-                .query((rs, row) -> new UserPreferences(
-                        rs.getString("preferred_city"), rs.getString("preferred_district"), rs.getString("locale")))
-                .single();
+        IdentityApi.UserPreferences preferences = identity.getUserPreferences(userId(authentication), locale);
+        return new UserPreferences(preferences.preferredCity(), preferences.preferredDistrict(), preferences.locale());
     }
 
     @PutMapping("/api/v1/me/preferences")
     @Transactional
     UserPreferences updateUserPreferences(@Valid @RequestBody UserPreferences request,
                                           Authentication authentication) {
-        UUID userId = userId(authentication);
-        jdbc.sql("""
-                INSERT INTO identity.user_preferences (user_id, preferred_city, preferred_district, locale, updated_at)
-                VALUES (:userId, :city, :district, :locale, now())
-                ON CONFLICT (user_id) DO UPDATE SET
-                    preferred_city = EXCLUDED.preferred_city,
-                    preferred_district = EXCLUDED.preferred_district,
-                    locale = EXCLUDED.locale,
-                    updated_at = now()
-                """)
-                .param("userId", userId)
-                .param("city", request.preferredCity())
-                .param("district", request.preferredDistrict())
-                .param("locale", request.locale())
-                .update();
+        IdentityApi.UserPreferences preferences = new IdentityApi.UserPreferences(
+                request.preferredCity(), request.preferredDistrict(), request.locale());
+        identity.updateUserPreferences(userId(authentication), preferences);
         return request;
     }
 

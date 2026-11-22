@@ -1,4 +1,4 @@
-package ma.kulha.support.application;
+package ma.kulha.admin.support.application;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -10,13 +10,13 @@ import java.util.Set;
 import java.util.UUID;
 import ma.kulha.admin.application.AuditApi;
 import ma.kulha.notification.application.NotificationOutbox;
-import ma.kulha.identity.domain.model.Role;
-import ma.kulha.offer.application.AdminOfferModerationService;
+import ma.kulha.identity.application.IdentityApi;
+import ma.kulha.merchant.application.MerchantApi;
+import ma.kulha.offer.application.OfferApi;
+import ma.kulha.reservation.application.ReservationSupportApi;
 import ma.kulha.offer.application.OfferApplicationService;
-import ma.kulha.reservation.domain.model.Reservation;
-import ma.kulha.reservation.domain.repository.ReservationRepository;
 import ma.kulha.shared.identity.UserAccountDirectory;
-import ma.kulha.support.interfaces.dto.OpenSupportCaseRequest;
+import ma.kulha.admin.support.interfaces.dto.OpenSupportCaseRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -28,32 +28,31 @@ public class SupportCaseService {
     private static final UUID SYSTEM_ACTOR = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final String CASE_SELECT = """
             SELECT c.id, c.reference, c.category, c.subject, c.description, c.priority, c.status,
-                   c.customer_user_id, u.full_name AS customer_name, c.merchant_id, m.name AS merchant_name,
-                   c.offer_id, o.title AS offer_title, c.reservation_reference, c.assigned_to,
-                   assignee.full_name AS assignee_name, c.hidden_offer, c.created_at, c.updated_at, c.resolved_at
+                   c.customer_user_id, c.merchant_id, c.offer_id, c.reservation_reference, c.assigned_to,
+                   c.hidden_offer, c.created_at, c.updated_at, c.resolved_at
             FROM admin.support_cases c
-            JOIN identity.users u ON u.id=c.customer_user_id
-            LEFT JOIN merchant.merchants m ON m.id=c.merchant_id
-            LEFT JOIN offer.offers o ON o.id=c.offer_id
-            LEFT JOIN identity.users assignee ON assignee.id=c.assigned_to
             """;
 
     private final JdbcClient jdbc;
-    private final ReservationRepository reservations;
+    private final ReservationSupportApi reservations;
     private final OfferApplicationService offers;
-    private final AdminOfferModerationService offerModeration;
+    private final OfferApi offerApi;
+    private final IdentityApi identities;
+    private final MerchantApi merchants;
     private final AuditApi audit;
     private final NotificationOutbox notifications;
     private final Clock clock;
     private final UserAccountDirectory userAccounts;
 
-    SupportCaseService(JdbcClient jdbc, ReservationRepository reservations, OfferApplicationService offers,
-                       AdminOfferModerationService offerModeration, AuditApi audit,
+    SupportCaseService(JdbcClient jdbc, ReservationSupportApi reservations, OfferApplicationService offers,
+                       OfferApi offerApi, IdentityApi identities, MerchantApi merchants, AuditApi audit,
                        NotificationOutbox notifications, Clock clock, UserAccountDirectory userAccounts) {
         this.jdbc = jdbc;
         this.reservations = reservations;
         this.offers = offers;
-        this.offerModeration = offerModeration;
+        this.offerApi = offerApi;
+        this.identities = identities;
+        this.merchants = merchants;
         this.audit = audit;
         this.notifications = notifications;
         this.clock = clock;
@@ -63,7 +62,10 @@ public class SupportCaseService {
     @Transactional
     public CaseDetail open(UUID customerId, OpenSupportCaseRequest request) {
         String category = request.category();
-        Reservation reservation = null;
+        IdentityApi.SupportUserSummary customer = identities.findSupportSummary(customerId)
+                .filter(IdentityApi.SupportUserSummary::active)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.GONE, "Customer account is no longer available."));
+        ReservationSupportApi.ReservationReference reservation = null;
         if (request.reservationReference() != null && !request.reservationReference().isBlank()) {
             reservation = reservations.findByReference(request.reservationReference().trim())
                     .filter(found -> found.customerId().equals(customerId))
@@ -77,15 +79,19 @@ public class SupportCaseService {
         String reference = "KLH-C-" + id.toString().substring(0, 8).toUpperCase(Locale.ROOT);
         UUID merchantId = reservation == null ? null : reservation.merchantId();
         UUID offerId = reservation == null ? null : reservation.offerId();
+        MerchantApi.SupportMerchantProfile merchant = merchantId == null ? null
+                : merchants.findSupportProfiles(List.of(merchantId)).stream().findFirst().orElse(null);
+        OfferApi.SupportOfferProfile offer = offerId == null ? null
+                : offerApi.findSupportProfiles(List.of(offerId)).stream().findFirst().orElse(null);
+        if (offer != null && !offer.merchantId().equals(merchantId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Reservation references inconsistent shop and offer records.");
+        }
         String priority = "FOOD_SAFETY".equals(category) ? "HIGH" : "MEDIUM";
         Instant now = clock.instant();
-        boolean hideOffer = false;
-        if (offerId != null && "FOOD_SAFETY".equals(category)) {
-            AdminOfferModerationService.OfferRow row = offerModeration.get(offerId);
-            if ("PUBLISHED".equals(row.status())) {
-                offers.adminSuspend(SYSTEM_ACTOR, offerId, "Food safety report under review");
-            }
-            hideOffer = true;
+        boolean hideOffer = "FOOD_SAFETY".equals(category) && offerId != null;
+        if (hideOffer && offer != null && "PUBLISHED".equals(offer.status())) {
+            offers.adminSuspend(SYSTEM_ACTOR, offerId, "Food safety report under review");
         }
 
         jdbc.sql("""
@@ -103,17 +109,17 @@ public class SupportCaseService {
 
         appendTimeline(id, "CUSTOMER", customerId, "Customer", "CUSTOMER", request.description().trim());
         if (hideOffer) appendTimeline(id, "SYSTEM", null, "KULHA!", "INTERNAL",
-                "The offer was hidden from customers while the food-safety case is reviewed.");
+                "The reservation's offer reference was retained for the food-safety report; an available published offer was hidden from customers.");
         audit.append(customerId, "SUPPORT_CASE_OPENED", "SUPPORT_CASE", reference, category, "SUCCESS");
         return get(reference);
     }
 
     @Transactional(readOnly = true)
     public CasePage list(UUID actorId, String status, String category, int page, int size) {
-        Set<Role> roles = userAccounts.findActiveRoles(actorId);
-        boolean support = roles.contains(Role.SUPPORT);
-        boolean administrator = roles.contains(Role.ADMIN);
-        boolean superAdministrator = roles.contains(Role.SUPER_ADMIN);
+        Set<String> roles = identities.findActiveRoleNames(actorId);
+        boolean support = roles.contains("SUPPORT");
+        boolean administrator = roles.contains("ADMIN");
+        boolean superAdministrator = roles.contains("SUPER_ADMIN");
         if (!support && !administrator && !superAdministrator) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Support workspace access denied.");
         int safePage = Math.max(0, page);
         int safeSize = Math.clamp(size, 1, 100);
@@ -129,7 +135,7 @@ public class SupportCaseService {
         if (status != null && !status.isBlank()) { query=query.param("status",status); count=count.param("status",status); }
         if (category != null && !category.isBlank()) { query=query.param("category",category); count=count.param("category",category); }
         if (support && !administrator && !superAdministrator) { query=query.param("actorId",actorId); count=count.param("actorId",actorId); }
-        List<CaseSummary> items = query.query((rs,row)->summary(rs)).list();
+        List<CaseSummary> items = enrich(query.query((rs,row)->summary(rs)).list());
         return new CasePage(items, safePage, safeSize, count.query(Long.class).single());
     }
 
@@ -144,6 +150,7 @@ public class SupportCaseService {
         CaseSummary summary = jdbc.sql(CASE_SELECT + " WHERE c.reference=:reference")
                 .param("reference", reference)
                 .query((rs,row)->summary(rs)).optional()
+                .map(row -> enrich(List.of(row)).get(0))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Support case not found."));
         List<TimelineItem> timeline = jdbc.sql("""
                 SELECT id, author_type, author_user_id, author_label, visibility, message, created_at
@@ -161,8 +168,8 @@ public class SupportCaseService {
         CaseSummary item = requireCaseAccess(adminId, reference);
         String clean = message == null ? "" : message.trim();
         if (clean.isEmpty() || clean.length() > 3000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message is required.");
-        String actor = jdbc.sql("SELECT full_name FROM identity.users WHERE id=:id")
-                .param("id", adminId).query(String.class).optional().orElse("KULHA support");
+        String actor = identities.findSupportSummary(adminId).filter(IdentityApi.SupportUserSummary::active)
+                .map(IdentityApi.SupportUserSummary::fullName).orElse("KULHA support");
         appendTimeline(item.id(), "ADMIN", adminId, actor, sendToCustomer ? "CUSTOMER" : "INTERNAL", clean);
         if (sendToCustomer) {
             notifications.enqueue(item.customerUserId(), "SUPPORT_CASE_UPDATE",
@@ -189,10 +196,10 @@ public class SupportCaseService {
 
     @Transactional
     public void act(UUID adminId, String reference, String action, String reason) {
-        Set<Role> roles = userAccounts.findActiveRoles(adminId);
+        Set<String> roles = identities.findActiveRoleNames(adminId);
         CaseSummary item = requireCaseAccess(adminId, reference, roles);
-        boolean supportOnly = roles.contains(Role.SUPPORT)
-                && !roles.contains(Role.ADMIN) && !roles.contains(Role.SUPER_ADMIN);
+        boolean supportOnly = roles.contains("SUPPORT")
+                && !roles.contains("ADMIN") && !roles.contains("SUPER_ADMIN");
         if (supportOnly && "KEEP_OFFER_HIDDEN".equals(action)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Offer moderation is not part of support-agent access.");
         }
@@ -202,8 +209,15 @@ public class SupportCaseService {
         switch (action) {
             case "CONTACT_SHOP" -> {
                 if (item.merchantId() == null) throw new ResponseStatusException(HttpStatus.CONFLICT, "This case has no linked shop.");
-                UUID owner = jdbc.sql("SELECT owner_user_id FROM merchant.merchants WHERE id=:id")
-                        .param("id", item.merchantId()).query(UUID.class).single();
+                MerchantApi.SupportMerchantProfile merchant = merchants.findSupportProfiles(List.of(item.merchantId()))
+                        .stream().findFirst()
+                        .filter(found -> "APPROVED".equals(found.status()))
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+                                "The linked shop is no longer active."));
+                UUID owner = merchant.ownerUserId();
+                if (identities.findSupportSummary(owner).filter(IdentityApi.SupportUserSummary::active).isEmpty()) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "The linked shop owner is no longer active.");
+                }
                 jdbc.sql("UPDATE admin.support_cases SET status='WAITING_REPLY', updated_at=:now WHERE id=:id")
                         .param("now", now.atOffset(java.time.ZoneOffset.UTC)).param("id", item.id()).update();
                 notifications.enqueue(owner, "SUPPORT_CASE_UPDATE", "KULHA support needs your reply",
@@ -223,8 +237,11 @@ public class SupportCaseService {
             }
             case "KEEP_OFFER_HIDDEN" -> {
                 if (item.offerId() == null) throw new ResponseStatusException(HttpStatus.CONFLICT, "This case has no linked offer.");
-                AdminOfferModerationService.OfferRow offer = offerModeration.get(item.offerId());
-                if ("PUBLISHED".equals(offer.status())) offers.adminSuspend(adminId, item.offerId(), cleanReason);
+                OfferApi.SupportOfferProfile offer = offerApi.findSupportProfiles(List.of(item.offerId()))
+                        .stream().findFirst().orElse(null);
+                if (offer != null && "PUBLISHED".equals(offer.status())) {
+                    offers.adminSuspend(adminId, item.offerId(), cleanReason);
+                }
                 jdbc.sql("UPDATE admin.support_cases SET hidden_offer=TRUE, updated_at=:now WHERE id=:id")
                         .param("now", now.atOffset(java.time.ZoneOffset.UTC)).param("id", item.id()).update();
                 appendTimeline(item.id(), "ADMIN", adminId, "KULHA support", "INTERNAL", "Offer kept hidden: " + cleanReason);
@@ -240,31 +257,30 @@ public class SupportCaseService {
         if (cleanReason.isEmpty() || cleanReason.length() > 500) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A disclosure reason is required.");
         }
-        Set<Role> roles = userAccounts.findActiveRoles(actorId);
+        Set<String> roles = identities.findActiveRoleNames(actorId);
         CaseSummary item = requireCaseAccess(actorId, reference, roles);
-        boolean superAdministrator = roles.contains(Role.SUPER_ADMIN);
-        boolean assignedSupport = !roles.contains(Role.ADMIN)
-                && !superAdministrator && roles.contains(Role.SUPPORT)
+        boolean superAdministrator = roles.contains("SUPER_ADMIN");
+        boolean assignedSupport = !roles.contains("ADMIN")
+                && !superAdministrator && roles.contains("SUPPORT")
                 && actorId.equals(item.assignedTo());
         if (!superAdministrator && !assignedSupport) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Customer disclosure is not permitted.");
         }
-        CustomerDetails details = jdbc.sql("SELECT full_name, email, phone FROM identity.users WHERE id=:id")
-                .param("id", item.customerUserId())
-                .query((rs,row)->new CustomerDetails(rs.getString("full_name"),rs.getString("email"),rs.getString("phone")))
-                .single();
+        IdentityApi.SupportUserDetails profile = identities.findSupportDetails(item.customerUserId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.GONE, "Customer account is no longer available."));
+        CustomerDetails details = new CustomerDetails(profile.fullName(), profile.email(), profile.phone());
         audit.append(actorId, "SUPPORT_CUSTOMER_DETAILS_REVEALED", "SUPPORT_CASE", reference, cleanReason, "SUCCESS");
         return details;
     }
 
     private CaseSummary requireCaseAccess(UUID actorId, String reference) {
-        return requireCaseAccess(actorId, reference, userAccounts.findActiveRoles(actorId));
+        return requireCaseAccess(actorId, reference, identities.findActiveRoleNames(actorId));
     }
 
-    private CaseSummary requireCaseAccess(UUID actorId, String reference, Set<Role> roles) {
-        boolean superAdministrator = roles.contains(Role.SUPER_ADMIN);
-        boolean administrator = roles.contains(Role.ADMIN);
-        boolean support = roles.contains(Role.SUPPORT);
+    private CaseSummary requireCaseAccess(UUID actorId, String reference, Set<String> roles) {
+        boolean superAdministrator = roles.contains("SUPER_ADMIN");
+        boolean administrator = roles.contains("ADMIN");
+        boolean support = roles.contains("SUPPORT");
         if (!superAdministrator && !administrator && !support) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Support case access denied.");
         }
@@ -276,14 +292,18 @@ public class SupportCaseService {
     }
 
     private void requireAdministrator(UUID actorId) {
-        Set<Role> roles = userAccounts.findActiveRoles(actorId);
-        if (!roles.contains(Role.ADMIN) && !roles.contains(Role.SUPER_ADMIN)) {
+        Set<String> roles = identities.findActiveRoleNames(actorId);
+        if (!roles.contains("ADMIN") && !roles.contains("SUPER_ADMIN")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Administrative support access required.");
         }
     }
 
     private void appendTimeline(UUID caseId, String authorType, UUID authorUserId, String authorLabel,
                                 String visibility, String message) {
+        if (authorUserId != null && identities.findSupportSummary(authorUserId)
+                .filter(IdentityApi.SupportUserSummary::active).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.GONE, "Timeline author account is no longer active.");
+        }
         jdbc.sql("""
                 INSERT INTO admin.support_case_timeline
                     (id, case_id, author_type, author_user_id, author_label, visibility, message, created_at)
@@ -296,14 +316,56 @@ public class SupportCaseService {
     private static CaseSummary summary(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new CaseSummary(rs.getObject("id",UUID.class),rs.getString("reference"),rs.getString("category"),
                 rs.getString("subject"),rs.getString("description"),rs.getString("priority"),rs.getString("status"),
-                rs.getObject("customer_user_id",UUID.class),mask(rs.getString("customer_name")),
-                rs.getObject("merchant_id",UUID.class),rs.getString("merchant_name"),
-                rs.getObject("offer_id",UUID.class),rs.getString("offer_title"),rs.getString("reservation_reference"),
-                rs.getObject("assigned_to",UUID.class),rs.getString("assignee_name"),rs.getBoolean("hidden_offer"),
+                rs.getObject("customer_user_id",UUID.class),"Customer",
+                rs.getObject("merchant_id",UUID.class),null,
+                rs.getObject("offer_id",UUID.class),null,rs.getString("reservation_reference"),
+                rs.getObject("assigned_to",UUID.class),null,rs.getBoolean("hidden_offer"),
                 rs.getObject("created_at",OffsetDateTime.class).toInstant(),
                 rs.getObject("updated_at",OffsetDateTime.class).toInstant(),
                 rs.getObject("resolved_at",OffsetDateTime.class)==null?null:rs.getObject("resolved_at",OffsetDateTime.class).toInstant());
     }
+    private List<CaseSummary> enrich(List<CaseSummary> cases) {
+        if (cases.isEmpty()) return List.of();
+        Set<UUID> userIds = new java.util.LinkedHashSet<>();
+        Set<UUID> merchantIds = new java.util.LinkedHashSet<>();
+        Set<UUID> offerIds = new java.util.LinkedHashSet<>();
+        Set<String> reservationReferences = new java.util.LinkedHashSet<>();
+        for (CaseSummary item : cases) {
+            userIds.add(item.customerUserId());
+            if (item.assignedTo() != null) userIds.add(item.assignedTo());
+            if (item.merchantId() != null) merchantIds.add(item.merchantId());
+            if (item.offerId() != null) offerIds.add(item.offerId());
+            if (item.reservationReference() != null) reservationReferences.add(item.reservationReference());
+        }
+        java.util.Map<UUID, IdentityApi.SupportUserSummary> userProfiles = identities.findSupportSummaries(userIds)
+                .stream().collect(java.util.stream.Collectors.toMap(IdentityApi.SupportUserSummary::id, p -> p));
+        java.util.Map<UUID, MerchantApi.SupportMerchantProfile> merchantProfiles = merchants.findSupportProfiles(merchantIds)
+                .stream().collect(java.util.stream.Collectors.toMap(MerchantApi.SupportMerchantProfile::id, p -> p));
+        java.util.Map<UUID, OfferApi.SupportOfferProfile> offerProfiles = offerApi.findSupportProfiles(offerIds)
+                .stream().collect(java.util.stream.Collectors.toMap(OfferApi.SupportOfferProfile::id, p -> p));
+        java.util.Map<String, ReservationSupportApi.ReservationReference> reservationSnapshots =
+                reservations.findByReferences(reservationReferences).stream()
+                        .collect(java.util.stream.Collectors.toMap(ReservationSupportApi.ReservationReference::reference, r -> r));
+        return cases.stream().map(item -> {
+            IdentityApi.SupportUserSummary customer = userProfiles.get(item.customerUserId());
+            IdentityApi.SupportUserSummary assignee = item.assignedTo() == null ? null : userProfiles.get(item.assignedTo());
+            MerchantApi.SupportMerchantProfile merchant = item.merchantId() == null ? null : merchantProfiles.get(item.merchantId());
+            OfferApi.SupportOfferProfile offer = item.offerId() == null ? null : offerProfiles.get(item.offerId());
+            ReservationSupportApi.ReservationReference snapshot = item.reservationReference() == null
+                    ? null : reservationSnapshots.get(item.reservationReference());
+            String merchantName = merchant != null ? merchant.name()
+                    : snapshot != null ? snapshot.merchantName() : "Shop unavailable";
+            String offerTitle = offer != null ? offer.title()
+                    : snapshot != null ? snapshot.offerTitle() : "Offer unavailable";
+            return new CaseSummary(item.id(), item.reference(), item.category(), item.subject(), item.description(),
+                    item.priority(), item.status(), item.customerUserId(),
+                    customer == null || !customer.active() ? "Customer unavailable" : mask(customer.fullName()),
+                    item.merchantId(), merchantName, item.offerId(), offerTitle, item.reservationReference(),
+                    item.assignedTo(), assignee == null || !assignee.active() ? "Former agent" : assignee.fullName(),
+                    item.hiddenOffer(), item.createdAt(), item.updatedAt(), item.resolvedAt());
+        }).toList();
+    }
+
     private static String mask(String fullName) {
         if (fullName == null || fullName.isBlank()) return "Customer";
         String[] parts=fullName.trim().split("\\s+");
