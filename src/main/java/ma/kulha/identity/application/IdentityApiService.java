@@ -71,6 +71,18 @@ class IdentityApiService implements IdentityApi {
     }
 
     @Override
+    public Map<UUID, String> findEmailsForNotifications(Collection<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) return Map.of();
+        return jdbc.sql("""
+                SELECT id, email
+                FROM identity.users
+                WHERE id IN (:ids) AND status = 'ACTIVE'
+                """).param("ids", userIds)
+                .query((rs, row) -> Map.entry(rs.getObject("id", UUID.class), rs.getString("email")))
+                .list().stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Override
     public Map<UUID, String> findLocales(Collection<UUID> userIds) {
         if (userIds == null || userIds.isEmpty()) return Map.of();
         return jdbc.sql("""
