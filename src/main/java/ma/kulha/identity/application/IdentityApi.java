@@ -1,5 +1,7 @@
 package ma.kulha.identity.application;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -13,4 +15,12 @@ public interface IdentityApi {
     void grantMerchantRole(UUID userId);
 
     void revokeMerchantRole(UUID userId);
+
+    /** Batch-resolves historical support references without requiring the account to remain active. */
+    List<SupportUserProfile> findSupportProfiles(Collection<UUID> userIds);
+
+    /** Resolves a single identity for an explicitly authorized PII disclosure. */
+    Optional<SupportUserProfile> findSupportProfile(UUID userId);
+
+    record SupportUserProfile(UUID id, String fullName, String email, String phone, boolean active) {}
 }
