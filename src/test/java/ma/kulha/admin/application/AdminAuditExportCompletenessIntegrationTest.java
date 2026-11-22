@@ -21,7 +21,7 @@ class AdminAuditExportCompletenessIntegrationTest extends AbstractApiIntegration
                     (id, actor_user_id, action, target_type, target_id, reason, result, correlation_id, created_at)
                 SELECT gen_random_uuid(), :actor, 'BULK_EXPORT_TEST', 'TEST', 'row-' || n,
                        NULL, 'SUCCESS', 'bulk-' || n, now() - (n * interval '1 second')
-                FROM generate_series(1, 5001) AS n
+                FROM generate_series(1, 5001) AS series(n)
                 """)
                 .param("actor", admin.id())
                 .update();
