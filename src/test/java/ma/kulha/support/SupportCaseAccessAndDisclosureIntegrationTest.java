@@ -59,7 +59,7 @@ class SupportCaseAccessAndDisclosureIntegrationTest extends AbstractApiIntegrati
         mvc.perform(put("/api/v1/admin/support-cases/" + reference + "/assignee")
                         .header("Authorization", bearer(support))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\\"assignedTo\\":\\""+otherSupport.id()+"\\"}"))
+                        .content("{\"assignedTo\":\""+otherSupport.id()+"\"}"))
                 .andExpect(status().isForbidden());
 
         assertThat(jdbc.sql("SELECT assigned_to FROM admin.support_cases WHERE reference=:reference")
