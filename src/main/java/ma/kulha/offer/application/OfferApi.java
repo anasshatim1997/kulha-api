@@ -14,6 +14,9 @@ public interface OfferApi {
 
     /** Batch-resolves historical offer references without filtering by publication status. */
     List<SupportOfferProfile> findSupportProfiles(Collection<UUID> offerIds);
+    MerchantDashboardOffers merchantDashboard(UUID merchantId, int limit);
 
     record SupportOfferProfile(UUID id, UUID merchantId, String title, String status) {}
+    record MerchantOfferRow(UUID id, String title, int priceMinor, int quantityTotal, int quantityReserved, String status) {}
+    record MerchantDashboardOffers(long liveOffers, List<MerchantOfferRow> offers) {}
 }
