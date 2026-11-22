@@ -2,6 +2,8 @@ package ma.kulha.identity.application;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -66,6 +68,18 @@ class IdentityApiService implements IdentityApi {
                         rs.getString("full_name"), rs.getString("email"), rs.getString("phone"),
                         "ACTIVE".equals(rs.getString("status"))))
                 .optional();
+    }
+
+    @Override
+    public Map<UUID, String> findLocales(Collection<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) return Map.of();
+        return jdbc.sql("""
+                SELECT user_id, locale
+                FROM identity.user_preferences
+                WHERE user_id IN (:ids)
+                """).param("ids", userIds)
+                .query((rs, row) -> Map.entry(rs.getObject("user_id", UUID.class), rs.getString("locale")))
+                .list().stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     @Override
