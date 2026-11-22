@@ -134,6 +134,34 @@ class SupportCaseAccessAndDisclosureIntegrationTest extends AbstractApiIntegrati
         assertThat(disclosureAuditReason(reference)).isEqualTo("Escalated identity verification");
     }
 
+
+    @Test
+    void caseRemainsReadableWhenReferencedCustomerIsDeactivated() throws Exception {
+        User customer = createUser("deactivated-customer@example.com", true);
+        User support = createUser("deactivated-customer-support@example.com", true, Role.SUPPORT);
+        String reference = createCase(customer);
+        assignDirectly(reference, support.id());
+
+        jdbc.sql("UPDATE identity.users SET status='DISABLED' WHERE id=:id")
+                .param("id", customer.id()).update();
+
+        mvc.perform(get("/api/v1/admin/support-cases/" + reference)
+                        .header("Authorization", bearer(support)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.customerLabel").value("Customer unavailable"));
+
+        mvc.perform(post("/api/v1/admin/support-cases/" + reference + "/reveal-customer")
+                        .header("Authorization", bearer(support))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"Assigned case requires historical contact details\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(customer.email()));
+
+        assertThat(disclosureAuditCount(reference)).isEqualTo(1);
+        assertThat(disclosureAuditReason(reference))
+                .isEqualTo("Assigned case requires historical contact details");
+    }
+
     private String bearer(User user) throws Exception {
         return "Bearer " + tokenFor(user);
     }
