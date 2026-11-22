@@ -3,6 +3,7 @@ package ma.kulha.notification.infrastructure.messaging;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -12,6 +13,7 @@ import java.util.stream.Collectors;
 import ma.kulha.identity.application.IdentityApi;
 import ma.kulha.notification.application.NotificationOutbox;
 import ma.kulha.notification.application.NotificationOutbox.PickupReminderPreferences;
+import ma.kulha.notification.application.NotificationOutbox.PickupReminderDraft;
 import ma.kulha.reservation.application.ReservationReminderApi;
 import ma.kulha.reservation.application.ReservationReminderApi.PickupReminderCandidate;
 import org.springframework.context.annotation.Profile;
@@ -25,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 class PickupReminderScheduler {
     private static final int PAGE_SIZE = 100;
     private static final int MAX_DISPATCHES_PER_RUN = 100;
-    private static final PickupReminderPreferences DEFAULT_PREFERENCES = new PickupReminderPreferences(true, 60);
+    private static final PickupReminderPreferences DEFAULT_PREFERENCES = new PickupReminderPreferences(true, 60, true);
 
     private final ReservationReminderApi reservations;
     private final NotificationOutbox notifications;
@@ -57,6 +59,7 @@ class PickupReminderScheduler {
             Map<UUID, PickupReminderPreferences> preferences = notifications.findPickupReminderPreferences(userIds);
             Map<UUID, String> locales = identities.findLocales(userIds);
 
+            List<PickupReminderDraft> drafts = new ArrayList<>();
             for (PickupReminderCandidate candidate : page) {
                 cursorPickupStart = candidate.pickupStart();
                 cursorReservationId = candidate.reservationId();
@@ -70,16 +73,17 @@ class PickupReminderScheduler {
                 if (!notifications.markPickupReminderDispatched(candidate.reservationId())) continue;
 
                 Locale locale = Locale.forLanguageTag(locales.getOrDefault(candidate.customerId(), "fr"));
-                notifications.enqueue(candidate.customerId(), "PICKUP_REMINDER",
+                drafts.add(new PickupReminderDraft(candidate.customerId(),
                         localized(locale, "Votre retrait approche", "Pickup starts soon", "اقترب موعد الاستلام"),
                         localized(locale, "Votre panier chez " + candidate.merchantName() + " sera bientôt prêt.",
                                 "Your basket at " + candidate.merchantName() + " will be ready soon.",
                                 "ستكون سلتك لدى " + candidate.merchantName() + " جاهزة قريباً."),
                         localized(locale, "Afficher mon code", "Show my code", "عرض رمز الاستلام"),
-                        "/reservations/" + candidate.reference());
+                        "/reservations/" + candidate.reference(), preference.emailEnabled()));
                 dispatched++;
                 if (dispatched >= MAX_DISPATCHES_PER_RUN) break;
             }
+            notifications.enqueuePickupReminderBatch(drafts);
 
             if (page.size() < PAGE_SIZE) break;
         }
