@@ -89,10 +89,14 @@ public class SupportCaseService {
             if (reservation.offerId() != null) {
                 offer = offerApi.findSupportProfiles(List.of(reservation.offerId())).stream().findFirst().orElse(null);
                 if (offer != null) {
-                    if (merchant != null && !merchant.id().equals(offer.merchantId())) {
+                    if (merchant == null) {
+                        // Preserve the reservation report, but do not persist an orphan offer reference.
+                        offer = null;
+                    } else if (!merchant.id().equals(offer.merchantId())) {
                         throw new ResponseStatusException(HttpStatus.CONFLICT, "Reservation references inconsistent shop and offer records.");
+                    } else {
+                        offerId = offer.id();
                     }
-                    offerId = offer.id();
                 }
             }
         }
