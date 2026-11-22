@@ -53,7 +53,7 @@ class NotificationOutboxRelayIntegrationTest extends AbstractApiIntegrationTest 
             return null;
         }).when(rabbit).convertAndSend(anyString(), anyString(), anyString(), any(CorrelationData.class));
 
-        transactions.executeWithoutResult(status -> relay.publishPending());
+        relay.publishPending();
 
         var published = jdbc.sql("""
                 SELECT attempt_count, published_at
