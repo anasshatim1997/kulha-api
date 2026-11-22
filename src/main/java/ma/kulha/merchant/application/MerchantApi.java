@@ -16,5 +16,5 @@ public interface MerchantApi extends MerchantPublicApi {
     /** Batch-resolves historical merchant references, including non-approved merchants. */
     List<SupportMerchantProfile> findSupportProfiles(Collection<UUID> merchantIds);
 
-    record SupportMerchantProfile(UUID id, UUID ownerUserId, String name, String status) {}
+    record SupportMerchantProfile(UUID id, UUID ownerUserId, String name, String city, String status) {}
 }
