@@ -83,7 +83,7 @@ class PickupReminderSchedulerIntegrationTest extends AbstractApiIntegrationTest 
     private String notificationTitle(UUID userId) {
         return jdbc.sql("""
                 SELECT payload->>'title' FROM notification.outbox_events
-                WHERE aggregate_id=:userId ORDER BY created_at DESC LIMIT 1
+                WHERE aggregate_id=:userId ORDER BY occurred_at DESC LIMIT 1
                 """).param("userId", userId).query(String.class).single();
     }
 }
