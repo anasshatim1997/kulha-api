@@ -6,6 +6,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import ma.kulha.admin.application.AuditApi;
+import ma.kulha.shared.csv.CsvEscaper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -115,12 +116,12 @@ public class MerchantOperationsService {
         audit.append(ownerId, "MERCHANT_SALES_EXPORTED", "MERCHANT", merchantId.toString(),
                 sales.from() + " to " + sales.to(), "SUCCESS");
         StringBuilder csv = new StringBuilder("date,reference,basket,quantity,amount_mad,status\n");
-        for (OrderRow row : ordersForRange(merchantId, sales.from(), sales.to(), 500)) {
-            csv.append(row.createdAt().atZone(SHOP_ZONE).toLocalDate()).append(',')
-                    .append(csv(row.reference())).append(',').append(csv(row.basket()))
+        for (SalesExportRow row : completedSalesForRange(merchantId, sales.from(), sales.to())) {
+            csv.append(row.completedAt().atZone(SHOP_ZONE).toLocalDate()).append(',')
+                    .append(CsvEscaper.cell(row.reference())).append(',').append(CsvEscaper.cell(row.basket()))
                     .append(',').append(row.quantity()).append(',')
                     .append(String.format(java.util.Locale.ROOT, "%.2f", row.amountMinor() / 100.0)).append(',')
-                    .append(csv(row.status())).append('\n');
+                    .append(CsvEscaper.cell("COMPLETED")).append('\n');
         }
         return csv.toString();
     }
@@ -147,6 +148,23 @@ public class MerchantOperationsService {
                         rs.getObject("pickup_end", java.time.OffsetDateTime.class).toInstant(),
                         rs.getLong("total_price_minor"), rs.getString("status"),
                         rs.getObject("created_at", java.time.OffsetDateTime.class).toInstant())).list();
+    }
+
+    private List<SalesExportRow> completedSalesForRange(UUID merchantId, LocalDate from, LocalDate to) {
+        return jdbc.sql("""
+                SELECT reference, offer_title, quantity, total_price_minor, updated_at
+                FROM reservation.reservations
+                WHERE merchant_id=:merchant
+                  AND status='COMPLETED'
+                  AND (updated_at AT TIME ZONE 'Africa/Casablanca')::date BETWEEN :fromDate AND :toDate
+                ORDER BY updated_at DESC, id
+                """)
+                .param("merchant", merchantId).param("fromDate", from).param("toDate", to)
+                .query((rs, row) -> new SalesExportRow(
+                        rs.getString("reference"), rs.getString("offer_title"), rs.getInt("quantity"),
+                        rs.getLong("total_price_minor"),
+                        rs.getObject("updated_at", java.time.OffsetDateTime.class).toInstant()))
+                .list();
     }
 
     private List<OrderRow> ordersForRange(UUID merchantId, LocalDate from, LocalDate to, int limit) {
@@ -184,8 +202,6 @@ public class MerchantOperationsService {
         String[] parts = name.trim().split("\\s+");
         return parts[0] + (parts.length > 1 ? " " + parts[parts.length - 1].substring(0, 1).toUpperCase() + "." : "");
     }
-    private static String csv(String value) { return "\"" + (value == null ? "" : value.replace("\"", "\"\"")) + "\""; }
-
     private record Shop(String name, String city) {}
     private record Stats(long liveOffers, long reservedToday, long basketsToday, long toCollectNow, long collectedToday) {}
     private record Totals(long basketsCollected, long salesMinor, long cancelled, long notCollected) {}
@@ -193,6 +209,7 @@ public class MerchantOperationsService {
     public record OrderRow(String reference, String customerName, String basket, int quantity,
                            java.time.Instant pickupStart, java.time.Instant pickupEnd, long amountMinor,
                            String status, java.time.Instant createdAt) {}
+    private record SalesExportRow(String reference, String basket, int quantity, long amountMinor, java.time.Instant completedAt) {}
     public record DailySale(LocalDate date, long amountMinor) {}
     public record Dashboard(String shopName, String city, long liveOffers, long reservedToday,
                             long basketsToday, long toCollectNow, long collectedToday,
