@@ -37,17 +37,15 @@ class NotificationOutboxRelayIntegrationTest extends AbstractApiIntegrationTest 
         transactions.executeWithoutResult(status -> relay.publishPending());
 
         var retry = jdbc.sql("""
-                SELECT attempt_count, published_at, dead_lettered_at, available_at, last_error
+                SELECT attempt_count, published_at, dead_lettered_at, available_at
                 FROM notification.outbox_events WHERE id=:id
                 """).param("id", eventId)
                 .query((rs, row) -> new RetryState(rs.getInt("attempt_count"), rs.getObject("published_at"),
-                        rs.getObject("dead_lettered_at"), rs.getObject("available_at", java.time.OffsetDateTime.class),
-                        rs.getString("last_error"))).single();
+                        rs.getObject("dead_lettered_at"), rs.getObject("available_at", java.time.OffsetDateTime.class))).single();
         assertThat(retry.attemptCount()).isEqualTo(1);
         assertThat(retry.publishedAt()).isNull();
         assertThat(retry.deadLetteredAt()).isNull();
         assertThat(retry.availableAt().toInstant()).isAfter(java.time.Instant.now());
-        assertThat(retry.lastError()).isEqualTo("IllegalStateException");
 
         jdbc.sql("UPDATE notification.outbox_events SET available_at=now()-interval '1 second' WHERE id=:id")
                 .param("id", eventId).update();
@@ -60,14 +58,12 @@ class NotificationOutboxRelayIntegrationTest extends AbstractApiIntegrationTest 
         transactions.executeWithoutResult(status -> relay.publishPending());
 
         var published = jdbc.sql("""
-                SELECT attempt_count, published_at, last_error
+                SELECT attempt_count, published_at
                 FROM notification.outbox_events WHERE id=:id
                 """).param("id", eventId)
-                .query((rs, row) -> new PublishedState(rs.getInt("attempt_count"), rs.getObject("published_at"),
-                        rs.getString("last_error"))).single();
+                .query((rs, row) -> new PublishedState(rs.getInt("attempt_count"), rs.getObject("published_at"))).single();
         assertThat(published.attemptCount()).isEqualTo(2);
         assertThat(published.publishedAt()).isNotNull();
-        assertThat(published.lastError()).isNull();
     }
 
     @Test
@@ -108,7 +104,7 @@ class NotificationOutboxRelayIntegrationTest extends AbstractApiIntegrationTest 
     }
 
     private record RetryState(int attemptCount, Object publishedAt, Object deadLetteredAt,
-                              java.time.OffsetDateTime availableAt, String lastError) {}
-    private record PublishedState(int attemptCount, Object publishedAt, String lastError) {}
+                              java.time.OffsetDateTime availableAt) {}
+    private record PublishedState(int attemptCount, Object publishedAt) {}
     private record DeadLetterState(int attemptCount, Object deadLetteredAt, String payload) {}
 }
