@@ -1,6 +1,8 @@
 package ma.kulha.offer.application;
+
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -12,9 +14,11 @@ import ma.kulha.offer.domain.repository.OfferRepository;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 @Service
 class OfferApiService implements OfferApi {
     private final OfferRepository offers;
@@ -22,13 +26,20 @@ class OfferApiService implements OfferApi {
     private final long reservationCutoffMinutes;
     private final Clock clock;
     private final ApplicationEventPublisher events;
+    private final JdbcClient jdbc;
+
     OfferApiService(OfferRepository offers, MerchantApi merchants,
             @Value("${app.offer.reservation-cutoff-minutes:30}") long reservationCutoffMinutes,
-            Clock clock, ApplicationEventPublisher events) {
-        this.offers = offers; this.merchants = merchants; this.clock = clock; this.events = events;
+            Clock clock, ApplicationEventPublisher events, JdbcClient jdbc) {
+        this.offers = offers;
+        this.merchants = merchants;
+        this.clock = clock;
+        this.events = events;
+        this.jdbc = jdbc;
         if (reservationCutoffMinutes < 0) throw new IllegalArgumentException("app.offer.reservation-cutoff-minutes cannot be negative");
         this.reservationCutoffMinutes = reservationCutoffMinutes;
     }
+
     @Override public boolean tryHoldUnits(UUID offerId, int units) {
         boolean held = offers.tryHoldUnits(offerId, units);
         if (held) publishSearchRefresh(offerId);
@@ -53,6 +64,20 @@ class OfferApiService implements OfferApi {
                         offer.title(), offer.category().name(), merchant.name(), merchant.address(),
                         merchant.city(), merchant.pickupInstructions())));
     }
+
+    @Override public List<SupportOfferProfile> findSupportProfiles(Collection<UUID> offerIds) {
+        if (offerIds == null || offerIds.isEmpty()) return List.of();
+        return jdbc.sql("""
+                SELECT id, title, status
+                FROM offer.offers
+                WHERE id IN (:ids)
+                """)
+                .param("ids", offerIds)
+                .query((rs, row) -> new SupportOfferProfile(rs.getObject("id", UUID.class),
+                        rs.getString("title"), rs.getString("status")))
+                .list();
+    }
+
     private void publishSearchRefresh(UUID offerId) {
         OfferEventEnvelope event = new OfferEventEnvelope(UUID.randomUUID(), "OfferChanged", 1, clock.instant(),
                 offerId, MDC.get("correlationId"), Map.of("offerId", offerId));
