@@ -1,5 +1,8 @@
 package ma.kulha.merchant.application;
 
+import java.io.IOException;
+import java.io.StringWriter;
+import java.io.Writer;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -86,21 +89,48 @@ public class MerchantOperationsService {
 
     @Transactional
     public String exportSales(UUID ownerId, LocalDate from, LocalDate to) {
+        StringWriter writer = new StringWriter();
+        try {
+            writeSalesExport(ownerId, from, to, writer);
+        } catch (IOException impossible) {
+            throw new IllegalStateException("Writing to an in-memory CSV buffer failed.", impossible);
+        }
+        return writer.toString();
+    }
+
+    @Transactional
+    public void writeSalesExport(UUID ownerId, LocalDate from, LocalDate to, Writer writer) throws IOException {
         Sales sales = sales(ownerId, from, to);
         UUID merchantId = merchants.findMerchantIdByOwner(ownerId).orElseThrow();
         audit.append(ownerId, "MERCHANT_SALES_EXPORTED", "MERCHANT", merchantId.toString(),
                 sales.from() + " to " + sales.to(), "SUCCESS");
-        StringBuilder csv = new StringBuilder("date,reference,basket,quantity,amount_mad,status\n");
-        for (ReservationReportingApi.SalesExportSnapshot row :
-                reservations.completedSalesForRange(merchantId, sales.from(), sales.to(), SHOP_ZONE)) {
-            csv.append(row.completedAt().atZone(SHOP_ZONE).toLocalDate()).append(',')
-                    .append(CsvEscaper.cell(row.reference())).append(',')
-                    .append(CsvEscaper.cell(row.basket())).append(',')
-                    .append(row.quantity()).append(',')
-                    .append(String.format(java.util.Locale.ROOT, "%.2f", row.totalPriceMinor() / 100.0)).append(',')
-                    .append(CsvEscaper.cell("COMPLETED")).append('\n');
+        writer.write("date,reference,basket,quantity,amount_mad,status\n");
+
+        java.time.Instant afterCompletedAt = null;
+        UUID afterReservationId = null;
+        while (true) {
+            List<ReservationReportingApi.SalesExportBatchRow> batch = reservations.completedSalesBatch(
+                    merchantId, sales.from(), sales.to(), SHOP_ZONE, afterCompletedAt, afterReservationId, 500);
+            if (batch.isEmpty()) break;
+            for (ReservationReportingApi.SalesExportBatchRow row : batch) {
+                writer.write(row.completedAt().atZone(SHOP_ZONE).toLocalDate().toString());
+                writer.write(',');
+                writer.write(CsvEscaper.cell(row.reference()));
+                writer.write(',');
+                writer.write(CsvEscaper.cell(row.basket()));
+                writer.write(',');
+                writer.write(Integer.toString(row.quantity()));
+                writer.write(',');
+                writer.write(String.format(java.util.Locale.ROOT, "%.2f", row.totalPriceMinor() / 100.0));
+                writer.write(',');
+                writer.write(CsvEscaper.cell("COMPLETED"));
+                writer.write('\n');
+            }
+            ReservationReportingApi.SalesExportBatchRow last = batch.get(batch.size() - 1);
+            afterCompletedAt = last.completedAt();
+            afterReservationId = last.id();
+            if (batch.size() < 500) break;
         }
-        return csv.toString();
     }
 
     private List<OrderRow> enrichOrders(List<OrderSnapshot> orders) {

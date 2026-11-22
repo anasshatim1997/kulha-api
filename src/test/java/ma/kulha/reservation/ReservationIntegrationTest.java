@@ -7,7 +7,13 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import ma.kulha.identity.domain.model.Role;
 import ma.kulha.identity.domain.model.User;
 import ma.kulha.support.AbstractApiIntegrationTest;
@@ -163,6 +169,44 @@ class ReservationIntegrationTest extends AbstractApiIntegrationTest {
                 .param("ref", reference).query(String.class).single()).isEqualTo("TOO_FAR");
         assertThat(jdbc.sql("SELECT reason_comment FROM reservation.cancellation_events WHERE reference=:ref")
                 .param("ref", reference).query(String.class).single()).isEqualTo("Travel plans changed");
+    }
+
+    @Test
+    void concurrentCustomersCannotOversellTheLastAvailableUnit() throws Exception {
+        User firstCustomer = createUser("reservation-race-a@example.test", true);
+        User secondCustomer = createUser("reservation-race-b@example.test", true);
+        Fixture fixture = fixture(1, Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200));
+        String firstToken = tokenFor(firstCustomer);
+        String secondToken = tokenFor(secondCustomer);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<MockHttpServletResponse> first = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Race start timed out.");
+                return create(firstToken, fixture, 1);
+            });
+            Future<MockHttpServletResponse> second = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Race start timed out.");
+                return create(secondToken, fixture, 1);
+            });
+
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            List<Integer> statuses = List.of(first.get(10, TimeUnit.SECONDS).getStatus(),
+                    second.get(10, TimeUnit.SECONDS).getStatus());
+
+            assertThat(statuses).containsExactlyInAnyOrder(201, 409);
+            assertThat(jdbc.sql("SELECT quantity_reserved FROM offer.offers WHERE id=:id")
+                    .param("id", fixture.offerId()).query(Integer.class).single()).isEqualTo(1);
+            assertThat(jdbc.sql("SELECT count(*) FROM reservation.reservations WHERE offer_id=:id")
+                    .param("id", fixture.offerId()).query(Long.class).single()).isEqualTo(1L);
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     private MockHttpServletResponse create(String token, Fixture fixture, int quantity) throws Exception {

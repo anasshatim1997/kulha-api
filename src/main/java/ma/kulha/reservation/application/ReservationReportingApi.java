@@ -13,6 +13,8 @@ public interface ReservationReportingApi {
     SalesReport salesReport(UUID merchantId, LocalDate from, LocalDate to, ZoneId zone);
     List<OrderSnapshot> merchantOrdersForCreatedRange(UUID merchantId, LocalDate from, LocalDate to, ZoneId zone, int limit);
     List<SalesExportSnapshot> completedSalesForRange(UUID merchantId, LocalDate from, LocalDate to, ZoneId zone);
+    List<SalesExportBatchRow> completedSalesBatch(UUID merchantId, LocalDate from, LocalDate to, ZoneId zone,
+                                                   Instant afterCompletedAt, UUID afterReservationId, int limit);
 
     record DashboardStats(long reservedToday, long basketsToday, long toCollectNow, long collectedToday) {}
     record OrderSnapshot(UUID customerId, String reference, String offerTitle, int quantity,
@@ -20,6 +22,8 @@ public interface ReservationReportingApi {
                          String status, Instant createdAt) {}
     record DailySale(LocalDate date, long amountMinor) {}
     record SalesExportSnapshot(String reference, String basket, int quantity, long totalPriceMinor, Instant completedAt) {}
+    record SalesExportBatchRow(UUID id, String reference, String basket, int quantity,
+                               long totalPriceMinor, Instant completedAt) {}
     record SalesReport(long basketsCollected, long salesMinor, long cancelled, long notCollected,
                        List<DailySale> daily, List<OrderSnapshot> latestOrders) {}
 }
