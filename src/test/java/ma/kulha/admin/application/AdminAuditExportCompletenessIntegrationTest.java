@@ -31,4 +31,31 @@ class AdminAuditExportCompletenessIntegrationTest extends AbstractApiIntegration
         assertThat(csv.split("\\R")).hasSize(5002);
         assertThat(csv).contains("row-1").contains("row-5001");
     }
+
+    @Test
+    void freeTextSearchFiltersTheAuditPageAndStreamingExport() throws Exception {
+        User admin = createUser("audit-search-admin@example.com", true, Role.ADMIN);
+        jdbc.sql("""
+                INSERT INTO admin.audit_log
+                    (id, actor_user_id, action, target_type, target_id, reason, result, correlation_id, created_at)
+                VALUES
+                    (gen_random_uuid(), :actor, 'MERCHANT_REVIEWED', 'MERCHANT', 'matching-target',
+                     'inspection keyword', 'SUCCESS', 'search-match', now()),
+                    (gen_random_uuid(), :actor, 'OFFER_PUBLISHED', 'OFFER', 'unrelated-target',
+                     'ordinary update', 'SUCCESS', 'search-other', now())
+                """)
+                .param("actor", admin.id())
+                .update();
+
+        AdminAuditQueryService.AuditPage page =
+                auditQuery.list(null, null, null, null, null, "INSPECTION KEYWORD", 0, 20);
+
+        assertThat(page.items()).hasSize(1);
+        assertThat(page.items().getFirst().targetId()).isEqualTo("matching-target");
+
+        java.io.StringWriter csv = new java.io.StringWriter();
+        auditQuery.writeExport(admin.id(), null, null, null, null, null, "inspection keyword", csv);
+        assertThat(csv.toString()).contains("matching-target").doesNotContain("unrelated-target");
+    }
+
 }
