@@ -17,6 +17,7 @@ Build one Spring Boot application with one module per business domain:
 identity, merchant, offer, reservation, notification, payment, admin.
 
 - One PostgreSQL schema per module. No cross-schema joins or foreign keys.
+- Support is an admin subdomain: its Java code lives under `ma.kulha.admin.support`, and its tables live in the `admin` schema.
 - Modules communicate only through their public `application` layer or through
   domain events. A module never uses another module's repositories, entities or
   infrastructure code.
