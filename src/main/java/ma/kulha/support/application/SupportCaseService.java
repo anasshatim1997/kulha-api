@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.UUID;
 import ma.kulha.admin.application.AuditApi;
 import ma.kulha.notification.application.NotificationOutbox;
+import ma.kulha.identity.domain.model.Role;
 import ma.kulha.offer.application.AdminOfferModerationService;
 import ma.kulha.offer.application.OfferApplicationService;
 import ma.kulha.reservation.domain.model.Reservation;
@@ -109,12 +110,17 @@ public class SupportCaseService {
     }
 
     @Transactional(readOnly = true)
-    public CasePage list(String status, String category, int page, int size) {
+    public CasePage list(UUID actorId, String status, String category, int page, int size) {
+        boolean support = userAccounts.hasActiveRole(actorId, Role.SUPPORT);
+        boolean administrator = userAccounts.hasActiveRole(actorId, Role.ADMIN);
+        boolean superAdministrator = userAccounts.hasActiveRole(actorId, Role.SUPER_ADMIN);
+        if (!support && !administrator && !superAdministrator) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Support workspace access denied.");
         int safePage = Math.max(0, page);
         int safeSize = Math.clamp(size, 1, 100);
         List<String> conditions = new ArrayList<>();
         if (status != null && !status.isBlank()) conditions.add("c.status=:status");
         if (category != null && !category.isBlank()) conditions.add("c.category=:category");
+        if (support && !administrator && !superAdministrator) conditions.add("c.assigned_to=:actorId");
         String where = conditions.isEmpty() ? "" : " WHERE " + String.join(" AND ", conditions);
         JdbcClient.StatementSpec query = jdbc.sql(CASE_SELECT + where
                 + " ORDER BY CASE c.priority WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END, c.created_at DESC LIMIT :limit OFFSET :offset")
@@ -122,8 +128,15 @@ public class SupportCaseService {
         JdbcClient.StatementSpec count = jdbc.sql("SELECT count(*) FROM admin.support_cases c" + where);
         if (status != null && !status.isBlank()) { query=query.param("status",status); count=count.param("status",status); }
         if (category != null && !category.isBlank()) { query=query.param("category",category); count=count.param("category",category); }
+        if (support && !administrator && !superAdministrator) { query=query.param("actorId",actorId); count=count.param("actorId",actorId); }
         List<CaseSummary> items = query.query((rs,row)->summary(rs)).list();
         return new CasePage(items, safePage, safeSize, count.query(Long.class).single());
+    }
+
+    @Transactional(readOnly = true)
+    public CaseDetail getForActor(UUID actorId, String reference) {
+        CaseSummary item = requireCaseAccess(actorId, reference);
+        return get(item.reference());
     }
 
     @Transactional(readOnly = true)
@@ -145,7 +158,7 @@ public class SupportCaseService {
 
     @Transactional
     public void addMessage(UUID adminId, String reference, String message, boolean sendToCustomer) {
-        CaseSummary item = get(reference).summary();
+        CaseSummary item = requireCaseAccess(adminId, reference);
         String clean = message == null ? "" : message.trim();
         if (clean.isEmpty() || clean.length() > 3000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message is required.");
         String actor = jdbc.sql("SELECT full_name FROM identity.users WHERE id=:id")
@@ -162,6 +175,7 @@ public class SupportCaseService {
 
     @Transactional
     public void assign(UUID adminId, String reference, UUID assignedTo) {
+        requireAdministrator(adminId);
         CaseSummary item = get(reference).summary();
         if (!userAccounts.isEligibleSupportCaseAssignee(assignedTo)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Eligible active assignee not found.");
@@ -175,7 +189,7 @@ public class SupportCaseService {
 
     @Transactional
     public void act(UUID adminId, String reference, String action, String reason) {
-        CaseSummary item = get(reference).summary();
+        CaseSummary item = requireCaseAccess(adminId, reference);
         String cleanReason = reason == null ? "" : reason.trim();
         if (cleanReason.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A reason is required.");
         Instant now = clock.instant();
@@ -215,15 +229,43 @@ public class SupportCaseService {
     }
 
     @Transactional
-    public CustomerDetails revealCustomer(UUID adminId, String reference) {
-        CaseSummary item = get(reference).summary();
+    public CustomerDetails revealCustomer(UUID actorId, String reference, String reason) {
+        String cleanReason = reason == null ? "" : reason.trim();
+        if (cleanReason.isEmpty() || cleanReason.length() > 1000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A disclosure reason is required.");
+        }
+        CaseSummary item = requireCaseAccess(actorId, reference);
+        boolean superAdministrator = userAccounts.hasActiveRole(actorId, Role.SUPER_ADMIN);
+        boolean assignedSupport = userAccounts.hasActiveRole(actorId, Role.SUPPORT) && actorId.equals(item.assignedTo());
+        if (!superAdministrator && !assignedSupport) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Customer disclosure is not permitted.");
+        }
         CustomerDetails details = jdbc.sql("SELECT full_name, email, phone FROM identity.users WHERE id=:id")
                 .param("id", item.customerUserId())
                 .query((rs,row)->new CustomerDetails(rs.getString("full_name"),rs.getString("email"),rs.getString("phone")))
                 .single();
-        audit.append(adminId, "SUPPORT_CUSTOMER_DETAILS_REVEALED", "SUPPORT_CASE", reference,
-                "Customer details revealed to support", "SUCCESS");
+        audit.append(actorId, "SUPPORT_CUSTOMER_DETAILS_REVEALED", "SUPPORT_CASE", reference, cleanReason, "SUCCESS");
         return details;
+    }
+
+    private CaseSummary requireCaseAccess(UUID actorId, String reference) {
+        boolean superAdministrator = userAccounts.hasActiveRole(actorId, Role.SUPER_ADMIN);
+        boolean administrator = userAccounts.hasActiveRole(actorId, Role.ADMIN);
+        boolean support = userAccounts.hasActiveRole(actorId, Role.SUPPORT);
+        if (!superAdministrator && !administrator && !support) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Support case access denied.");
+        }
+        CaseSummary item = get(reference).summary();
+        if (support && !administrator && !superAdministrator && !actorId.equals(item.assignedTo())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Support case not found.");
+        }
+        return item;
+    }
+
+    private void requireAdministrator(UUID actorId) {
+        if (!userAccounts.hasActiveRole(actorId, Role.ADMIN) && !userAccounts.hasActiveRole(actorId, Role.SUPER_ADMIN)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Administrative support access required.");
+        }
     }
 
     private void appendTimeline(UUID caseId, String authorType, UUID authorUserId, String authorLabel,
