@@ -130,6 +130,32 @@ class ReservationReportingApiService implements ReservationReportingApi {
                 .list();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<SalesExportBatchRow> completedSalesBatch(UUID merchantId, LocalDate from, LocalDate to, ZoneId zone,
+                                                          Instant afterCompletedAt, UUID afterReservationId, int limit) {
+        String cursorClause = afterCompletedAt == null ? ""
+                : " AND (updated_at, id) < (:afterCompletedAt, :afterReservationId)";
+        var query = jdbc.sql("""
+                SELECT id, reference, offer_title, quantity, total_price_minor, updated_at
+                FROM reservation.reservations
+                WHERE merchant_id=:merchant AND status='COMPLETED'
+                  AND (updated_at AT TIME ZONE :zone)::date BETWEEN :fromDate AND :toDate
+                """ + cursorClause + " ORDER BY updated_at DESC, id DESC LIMIT :limit")
+                .param("merchant", merchantId).param("zone", zone.getId())
+                .param("fromDate", from).param("toDate", to);
+        if (afterCompletedAt != null) {
+            query = query.param("afterCompletedAt", db(afterCompletedAt), Types.TIMESTAMP_WITH_TIMEZONE)
+                    .param("afterReservationId", afterReservationId);
+        }
+        return query.param("limit", Math.clamp(limit, 1, 1000))
+                .query((rs, row) -> new SalesExportBatchRow(
+                        rs.getObject("id", UUID.class), rs.getString("reference"), rs.getString("offer_title"),
+                        rs.getInt("quantity"), rs.getLong("total_price_minor"),
+                        instant(rs.getObject("updated_at", OffsetDateTime.class))))
+                .list();
+    }
+
     private static OrderSnapshot mapOrder(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
         return new OrderSnapshot(rs.getObject("customer_id", UUID.class), rs.getString("reference"),
                 rs.getString("offer_title"), rs.getInt("quantity"),

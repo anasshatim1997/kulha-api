@@ -1,5 +1,8 @@
 package ma.kulha.merchant.interfaces.rest;
 
+import java.io.BufferedWriter;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.UUID;
 import ma.kulha.merchant.application.MerchantOperationsService;
@@ -13,6 +16,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @RequestMapping("/api/v1/merchants/me")
@@ -39,12 +43,17 @@ public class MerchantOperationsController {
     }
 
     @GetMapping(value = "/sales/export", produces = "text/csv")
-    ResponseEntity<String> exportSales(@AuthenticationPrincipal Jwt jwt,
+    ResponseEntity<StreamingResponseBody> exportSales(@AuthenticationPrincipal Jwt jwt,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        String csv = operations.exportSales(userId(jwt), from, to);
-        return ResponseEntity.ok().contentType(MediaType.parseMediaType("text/csv"))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=kulha-sales.csv").body(csv);
+        UUID ownerId = userId(jwt);
+        StreamingResponseBody body = outputStream -> {
+            var writer = new BufferedWriter(new OutputStreamWriter(outputStream, StandardCharsets.UTF_8));
+            operations.writeSalesExport(ownerId, from, to, writer);
+            writer.flush();
+        };
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=kulha-sales.csv").body(body);
     }
 
     private static UUID userId(Jwt jwt) { return UUID.fromString(jwt.getSubject()); }

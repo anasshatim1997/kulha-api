@@ -1,6 +1,12 @@
 package ma.kulha.admin.application;
 
+import java.io.IOException;
+import java.io.StringWriter;
+import java.io.Writer;
+import java.sql.Types;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -15,6 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AdminAuditQueryService {
+    private static final int EXPORT_BATCH_SIZE = 500;
+
     private final JdbcClient jdbc;
     private final AuditApi audit;
     private final IdentityApi identities;
@@ -38,17 +46,54 @@ public class AdminAuditQueryService {
 
     @Transactional
     public String export(UUID adminId, LocalDate from, LocalDate to, UUID actorId, String action, String result) {
-        audit.append(adminId, "ADMIN_AUDIT_EXPORTED", "AUDIT_LOG", "QUERY", "Filtered export", "SUCCESS");
-        List<AuditRow> rows = enrichActorNames(queryRows(filter(from, to, actorId, action, result), null, null));
-        StringBuilder csv = new StringBuilder("time,actor,action,record,reason,result,correlation_id\n");
-        for (AuditRow row : rows) {
-            csv.append(row.createdAt()).append(',').append(CsvEscaper.cell(row.actorName())).append(',')
-                    .append(CsvEscaper.cell(row.action())).append(',')
-                    .append(CsvEscaper.cell(row.targetType() + " · " + row.targetId())).append(',')
-                    .append(CsvEscaper.cell(row.reason())).append(',').append(CsvEscaper.cell(row.result())).append(',')
-                    .append(CsvEscaper.cell(row.correlationId())).append('\n');
+        StringWriter writer = new StringWriter();
+        try {
+            writeExport(adminId, from, to, actorId, action, result, writer);
+        } catch (IOException impossible) {
+            throw new IllegalStateException("Writing to an in-memory CSV buffer failed.", impossible);
         }
-        return csv.toString();
+        return writer.toString();
+    }
+
+    @Transactional
+    public void writeExport(UUID adminId, LocalDate from, LocalDate to, UUID actorId, String action, String result,
+                            Writer writer) throws IOException {
+        audit.append(adminId, "ADMIN_AUDIT_EXPORTED", "AUDIT_LOG", "QUERY", "Filtered export", "SUCCESS");
+        writer.write("time,actor,action,record,reason,result,correlation_id\n");
+
+        Filter filter = filter(from, to, actorId, action, result);
+        OffsetDateTime cursorCreatedAt = null;
+        UUID cursorId = null;
+        while (true) {
+            List<AuditRow> batch = queryExportBatch(filter, cursorCreatedAt, cursorId);
+            if (batch.isEmpty()) break;
+
+            for (AuditRow row : enrichActorNames(batch)) {
+                writeCsvRow(writer, row);
+            }
+
+            AuditRow last = batch.get(batch.size() - 1);
+            cursorCreatedAt = last.createdAt().atOffset(ZoneOffset.UTC);
+            cursorId = last.id();
+            if (batch.size() < EXPORT_BATCH_SIZE) break;
+        }
+    }
+
+    private static void writeCsvRow(Writer writer, AuditRow row) throws IOException {
+        writer.write(row.createdAt().toString());
+        writer.write(',');
+        writer.write(CsvEscaper.cell(row.actorName()));
+        writer.write(',');
+        writer.write(CsvEscaper.cell(row.action()));
+        writer.write(',');
+        writer.write(CsvEscaper.cell(row.targetType() + " · " + row.targetId()));
+        writer.write(',');
+        writer.write(CsvEscaper.cell(row.reason()));
+        writer.write(',');
+        writer.write(CsvEscaper.cell(row.result()));
+        writer.write(',');
+        writer.write(CsvEscaper.cell(row.correlationId()));
+        writer.write('\n');
     }
 
     private Filter filter(LocalDate from, LocalDate to, UUID actorId, String action, String result) {
@@ -75,12 +120,32 @@ public class AdminAuditQueryService {
                 FROM admin.audit_log a
                 """ + filter.where() + " ORDER BY a.created_at DESC, a.id DESC" + pagination), filter);
         if (limit != null) query = query.param("limit", limit).param("offset", offset);
-        return query.query((rs, row) -> new AuditRow(
+        return query.query(AdminAuditQueryService::mapAuditRow).list();
+    }
+
+    private List<AuditRow> queryExportBatch(Filter filter, OffsetDateTime afterCreatedAt, UUID afterId) {
+        String cursorClause = afterCreatedAt == null ? "" : " AND (a.created_at, a.id) < (:afterCreatedAt, :afterId)";
+        String where = filter.where();
+        if (afterCreatedAt != null && where.isEmpty()) where = " WHERE true";
+        JdbcClient.StatementSpec query = bind(jdbc.sql("""
+                SELECT a.id, a.actor_user_id, a.action, a.target_type, a.target_id, a.reason,
+                       a.result, a.correlation_id, a.created_at
+                FROM admin.audit_log a
+                """ + where + cursorClause + " ORDER BY a.created_at DESC, a.id DESC LIMIT :limit"), filter);
+        if (afterCreatedAt != null) {
+            query = query.param("afterCreatedAt", afterCreatedAt, Types.TIMESTAMP_WITH_TIMEZONE)
+                    .param("afterId", afterId);
+        }
+        return query.param("limit", EXPORT_BATCH_SIZE).query(AdminAuditQueryService::mapAuditRow).list();
+    }
+
+    private static AuditRow mapAuditRow(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
+        return new AuditRow(
                 rs.getObject("id", UUID.class), rs.getObject("actor_user_id", UUID.class),
                 "Unknown actor", rs.getString("action"), rs.getString("target_type"),
                 rs.getString("target_id"), rs.getString("reason"), rs.getString("result"),
-                rs.getString("correlation_id"), rs.getObject("created_at", java.time.OffsetDateTime.class).toInstant()
-        )).list();
+                rs.getString("correlation_id"), rs.getObject("created_at", OffsetDateTime.class).toInstant()
+        );
     }
 
     private JdbcClient.StatementSpec bind(JdbcClient.StatementSpec query, Filter filter) {
