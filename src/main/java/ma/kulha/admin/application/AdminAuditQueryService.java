@@ -2,8 +2,12 @@ package ma.kulha.admin.application;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import ma.kulha.identity.application.IdentityApi;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,10 +16,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminAuditQueryService {
     private final JdbcClient jdbc;
     private final AuditApi audit;
+    private final IdentityApi identities;
 
-    AdminAuditQueryService(JdbcClient jdbc, AuditApi audit) {
+    AdminAuditQueryService(JdbcClient jdbc, AuditApi audit, IdentityApi identities) {
         this.jdbc = jdbc;
         this.audit = audit;
+        this.identities = identities;
     }
 
     @Transactional(readOnly = true)
@@ -32,9 +38,9 @@ public class AdminAuditQueryService {
         String where = clauses.isEmpty() ? "" : " WHERE " + String.join(" AND ", clauses);
         JdbcClient.StatementSpec count = jdbc.sql("SELECT count(*) FROM admin.audit_log a" + where);
         JdbcClient.StatementSpec query = jdbc.sql("""
-                SELECT a.id, a.actor_user_id, coalesce(u.full_name, 'Unknown actor') AS actor_name,
-                       a.action, a.target_type, a.target_id, a.reason, a.result, a.correlation_id, a.created_at
-                FROM admin.audit_log a LEFT JOIN identity.users u ON u.id=a.actor_user_id
+                SELECT a.id, a.actor_user_id, a.action, a.target_type, a.target_id, a.reason,
+                       a.result, a.correlation_id, a.created_at
+                FROM admin.audit_log a
                 """ + where + " ORDER BY a.created_at DESC, a.id DESC LIMIT :limit OFFSET :offset")
                 .param("limit", safeSize).param("offset", safePage * safeSize);
         if (from != null) { count=count.param("fromDate",from); query=query.param("fromDate",from); }
@@ -44,12 +50,26 @@ public class AdminAuditQueryService {
         if (result != null && !result.isBlank()) { count=count.param("result",result); query=query.param("result",result); }
         List<AuditRow> rows = query.query((rs, row) -> new AuditRow(
                 rs.getObject("id", UUID.class), rs.getObject("actor_user_id", UUID.class),
-                rs.getString("actor_name"), rs.getString("action"), rs.getString("target_type"),
+                "Unknown actor", rs.getString("action"), rs.getString("target_type"),
                 rs.getString("target_id"), rs.getString("reason"), rs.getString("result"),
                 rs.getString("correlation_id"), rs.getObject("created_at", java.time.OffsetDateTime.class).toInstant()
         )).list();
         long total = count.query(Long.class).single();
-        return new AuditPage(rows, safePage, safeSize, total);
+        return new AuditPage(enrichActorNames(rows), safePage, safeSize, total);
+    }
+
+    private List<AuditRow> enrichActorNames(List<AuditRow> rows) {
+        LinkedHashSet<UUID> actorIds = rows.stream().map(AuditRow::actorUserId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<UUID, IdentityApi.SupportUserSummary> profiles = identities.findSupportSummaries(actorIds).stream()
+                .collect(Collectors.toMap(IdentityApi.SupportUserSummary::id, profile -> profile));
+        return rows.stream().map(row -> {
+            IdentityApi.SupportUserSummary profile = row.actorUserId() == null ? null : profiles.get(row.actorUserId());
+            return new AuditRow(row.id(), row.actorUserId(),
+                    profile == null ? "Unknown actor" : profile.fullName(), row.action(), row.targetType(),
+                    row.targetId(), row.reason(), row.result(), row.correlationId(), row.createdAt());
+        }).toList();
     }
 
     @Transactional
@@ -68,7 +88,7 @@ public class AdminAuditQueryService {
     }
 
     private static String csv(String value) {
-        return "\"" + (value == null ? "" : value.replace("\"", "\"\"")) + "\"";
+        return ma.kulha.shared.csv.CsvEscaper.cell(value);
     }
     public record AuditRow(UUID id, UUID actorUserId, String actorName, String action, String targetType,
                            String targetId, String reason, String result, String correlationId,
