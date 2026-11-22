@@ -1,6 +1,7 @@
 package ma.kulha.merchant.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -101,10 +102,6 @@ class MerchantStaffRoleConcurrencyIntegrationTest extends AbstractApiIntegration
 
         staffService.addPickupStaff(ownerB.id(), staff.email(), true, true, false);
         assertMembershipState(staff.id(), 1, true);
-    }
-
-    private void assertMembershipState(User staff, int expectedCount, boolean expectedRole) {
-        assertMembershipState(staff.id(), expectedCount, expectedRole);
     }
 
     private void assertMembershipState(java.util.UUID staffId, int expectedCount, boolean expectedRole) {
