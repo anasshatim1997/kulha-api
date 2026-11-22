@@ -7,6 +7,9 @@ import java.util.UUID;
 public interface UserAccountDirectory {
     Optional<Account> findAccountByEmail(String email);
     Optional<Account> findAccountById(UUID userId);
+
+    /** True only for active users authorized to handle support cases. */
+    boolean isEligibleSupportCaseAssignee(UUID userId);
     void grantPickupStaff(UUID userId);
     void revokePickupStaff(UUID userId);
 
