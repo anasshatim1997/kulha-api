@@ -6,6 +6,7 @@ import ma.kulha.support.application.SupportCaseService;
 import ma.kulha.support.interfaces.dto.AssignSupportCaseRequest;
 import ma.kulha.support.interfaces.dto.SupportCaseActionRequest;
 import ma.kulha.support.interfaces.dto.SupportCaseMessageRequest;
+import ma.kulha.support.interfaces.dto.RevealSupportCustomerRequest;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,15 +25,17 @@ public class AdminSupportCaseController {
     AdminSupportCaseController(SupportCaseService cases) { this.cases = cases; }
 
     @GetMapping
-    SupportCaseService.CasePage list(@RequestParam(required = false) String status,
+    SupportCaseService.CasePage list(@AuthenticationPrincipal Jwt jwt, @RequestParam(required = false) String status,
             @RequestParam(required = false) String category,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
-        return cases.list(status, category, page, size);
+        return cases.list(UUID.fromString(jwt.getSubject()), status, category, page, size);
     }
 
     @GetMapping("/{reference}")
-    SupportCaseService.CaseDetail get(@PathVariable String reference) { return cases.get(reference); }
+    SupportCaseService.CaseDetail get(@AuthenticationPrincipal Jwt jwt, @PathVariable String reference) {
+        return cases.getForActor(UUID.fromString(jwt.getSubject()), reference);
+    }
 
     @PostMapping("/{reference}/messages")
     void message(@AuthenticationPrincipal Jwt jwt, @PathVariable String reference,
@@ -53,7 +56,8 @@ public class AdminSupportCaseController {
     }
 
     @PostMapping("/{reference}/reveal-customer")
-    SupportCaseService.CustomerDetails reveal(@AuthenticationPrincipal Jwt jwt, @PathVariable String reference) {
-        return cases.revealCustomer(UUID.fromString(jwt.getSubject()), reference);
+    SupportCaseService.CustomerDetails reveal(@AuthenticationPrincipal Jwt jwt, @PathVariable String reference,
+            @Valid @RequestBody RevealSupportCustomerRequest request) {
+        return cases.revealCustomer(UUID.fromString(jwt.getSubject()), reference, request.reason());
     }
 }
