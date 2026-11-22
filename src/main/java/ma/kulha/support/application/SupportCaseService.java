@@ -13,6 +13,7 @@ import ma.kulha.offer.application.AdminOfferModerationService;
 import ma.kulha.offer.application.OfferApplicationService;
 import ma.kulha.reservation.domain.model.Reservation;
 import ma.kulha.reservation.domain.repository.ReservationRepository;
+import ma.kulha.shared.identity.UserAccountDirectory;
 import ma.kulha.support.interfaces.dto.OpenSupportCaseRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -42,10 +43,11 @@ public class SupportCaseService {
     private final AuditApi audit;
     private final NotificationOutbox notifications;
     private final Clock clock;
+    private final UserAccountDirectory userAccounts;
 
     SupportCaseService(JdbcClient jdbc, ReservationRepository reservations, OfferApplicationService offers,
                        AdminOfferModerationService offerModeration, AuditApi audit,
-                       NotificationOutbox notifications, Clock clock) {
+                       NotificationOutbox notifications, Clock clock, UserAccountDirectory userAccounts) {
         this.jdbc = jdbc;
         this.reservations = reservations;
         this.offers = offers;
@@ -53,6 +55,7 @@ public class SupportCaseService {
         this.audit = audit;
         this.notifications = notifications;
         this.clock = clock;
+        this.userAccounts = userAccounts;
     }
 
     @Transactional
@@ -160,18 +163,7 @@ public class SupportCaseService {
     @Transactional
     public void assign(UUID adminId, String reference, UUID assignedTo) {
         CaseSummary item = get(reference).summary();
-        boolean eligible = jdbc.sql("""
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM identity.users u
-                    JOIN identity.user_roles r ON r.user_id = u.id
-                    WHERE u.id = :id
-                      AND u.status = 'ACTIVE'
-                      AND r.role IN ('SUPPORT', 'ADMIN', 'SUPER_ADMIN')
-                )
-                """)
-                .param("id", assignedTo).query(Boolean.class).single();
-        if (!eligible) {
+        if (!userAccounts.isEligibleSupportCaseAssignee(assignedTo)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Eligible active assignee not found.");
         }
         jdbc.sql("UPDATE admin.support_cases SET assigned_to=:assignee, updated_at=:now WHERE id=:id")
