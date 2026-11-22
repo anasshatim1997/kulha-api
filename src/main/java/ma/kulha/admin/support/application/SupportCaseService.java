@@ -77,33 +77,20 @@ public class SupportCaseService {
 
         UUID id = UUID.randomUUID();
         String reference = "KLH-C-" + id.toString().substring(0, 8).toUpperCase(Locale.ROOT);
-        UUID merchantId = null;
-        UUID offerId = null;
-        MerchantApi.SupportMerchantProfile merchant = null;
-        OfferApi.SupportOfferProfile offer = null;
-        if (reservation != null) {
-            if (reservation.merchantId() != null) {
-                merchant = merchants.findSupportProfiles(List.of(reservation.merchantId())).stream().findFirst().orElse(null);
-                if (merchant != null) merchantId = merchant.id();
-            }
-            if (reservation.offerId() != null) {
-                offer = offerApi.findSupportProfiles(List.of(reservation.offerId())).stream().findFirst().orElse(null);
-                if (offer != null) {
-                    if (merchant == null) {
-                        // Preserve the reservation report, but do not persist an orphan offer reference.
-                        offer = null;
-                    } else if (!merchant.id().equals(offer.merchantId())) {
-                        throw new ResponseStatusException(HttpStatus.CONFLICT, "Reservation references inconsistent shop and offer records.");
-                    } else {
-                        offerId = offer.id();
-                    }
-                }
-            }
+        UUID merchantId = reservation == null ? null : reservation.merchantId();
+        UUID offerId = reservation == null ? null : reservation.offerId();
+        MerchantApi.SupportMerchantProfile merchant = merchantId == null ? null
+                : merchants.findSupportProfiles(List.of(merchantId)).stream().findFirst().orElse(null);
+        OfferApi.SupportOfferProfile offer = offerId == null ? null
+                : offerApi.findSupportProfiles(List.of(offerId)).stream().findFirst().orElse(null);
+        if (offer != null && !offer.merchantId().equals(merchantId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Reservation references inconsistent shop and offer records.");
         }
         String priority = "FOOD_SAFETY".equals(category) ? "HIGH" : "MEDIUM";
         Instant now = clock.instant();
-        boolean hideOffer = "FOOD_SAFETY".equals(category) && offer != null;
-        if (hideOffer && "PUBLISHED".equals(offer.status())) {
+        boolean hideOffer = "FOOD_SAFETY".equals(category) && offerId != null;
+        if (hideOffer && offer != null && "PUBLISHED".equals(offer.status())) {
             offers.adminSuspend(SYSTEM_ACTOR, offerId, "Food safety report under review");
         }
 
@@ -122,7 +109,7 @@ public class SupportCaseService {
 
         appendTimeline(id, "CUSTOMER", customerId, "Customer", "CUSTOMER", request.description().trim());
         if (hideOffer) appendTimeline(id, "SYSTEM", null, "KULHA!", "INTERNAL",
-                "The offer was hidden from customers while the food-safety case is reviewed.");
+                "The reservation's offer reference was retained for the food-safety report; an available published offer was hidden from customers.");
         audit.append(customerId, "SUPPORT_CASE_OPENED", "SUPPORT_CASE", reference, category, "SUCCESS");
         return get(reference);
     }
@@ -342,11 +329,13 @@ public class SupportCaseService {
         Set<UUID> userIds = new java.util.LinkedHashSet<>();
         Set<UUID> merchantIds = new java.util.LinkedHashSet<>();
         Set<UUID> offerIds = new java.util.LinkedHashSet<>();
+        Set<String> reservationReferences = new java.util.LinkedHashSet<>();
         for (CaseSummary item : cases) {
             userIds.add(item.customerUserId());
             if (item.assignedTo() != null) userIds.add(item.assignedTo());
             if (item.merchantId() != null) merchantIds.add(item.merchantId());
             if (item.offerId() != null) offerIds.add(item.offerId());
+            if (item.reservationReference() != null) reservationReferences.add(item.reservationReference());
         }
         java.util.Map<UUID, IdentityApi.SupportUserSummary> userProfiles = identities.findSupportSummaries(userIds)
                 .stream().collect(java.util.stream.Collectors.toMap(IdentityApi.SupportUserSummary::id, p -> p));
@@ -354,16 +343,24 @@ public class SupportCaseService {
                 .stream().collect(java.util.stream.Collectors.toMap(MerchantApi.SupportMerchantProfile::id, p -> p));
         java.util.Map<UUID, OfferApi.SupportOfferProfile> offerProfiles = offerApi.findSupportProfiles(offerIds)
                 .stream().collect(java.util.stream.Collectors.toMap(OfferApi.SupportOfferProfile::id, p -> p));
+        java.util.Map<String, ReservationSupportApi.ReservationReference> reservationSnapshots =
+                reservations.findByReferences(reservationReferences).stream()
+                        .collect(java.util.stream.Collectors.toMap(ReservationSupportApi.ReservationReference::reference, r -> r));
         return cases.stream().map(item -> {
             IdentityApi.SupportUserSummary customer = userProfiles.get(item.customerUserId());
             IdentityApi.SupportUserSummary assignee = item.assignedTo() == null ? null : userProfiles.get(item.assignedTo());
             MerchantApi.SupportMerchantProfile merchant = item.merchantId() == null ? null : merchantProfiles.get(item.merchantId());
             OfferApi.SupportOfferProfile offer = item.offerId() == null ? null : offerProfiles.get(item.offerId());
+            ReservationSupportApi.ReservationReference snapshot = item.reservationReference() == null
+                    ? null : reservationSnapshots.get(item.reservationReference());
+            String merchantName = merchant != null ? merchant.name()
+                    : snapshot != null ? snapshot.merchantName() : "Shop unavailable";
+            String offerTitle = offer != null ? offer.title()
+                    : snapshot != null ? snapshot.offerTitle() : "Offer unavailable";
             return new CaseSummary(item.id(), item.reference(), item.category(), item.subject(), item.description(),
                     item.priority(), item.status(), item.customerUserId(),
                     customer == null || !customer.active() ? "Customer unavailable" : mask(customer.fullName()),
-                    item.merchantId(), merchant == null ? "Shop unavailable" : merchant.name(),
-                    item.offerId(), offer == null ? "Offer unavailable" : offer.title(), item.reservationReference(),
+                    item.merchantId(), merchantName, item.offerId(), offerTitle, item.reservationReference(),
                     item.assignedTo(), assignee == null || !assignee.active() ? "Former agent" : assignee.fullName(),
                     item.hiddenOffer(), item.createdAt(), item.updatedAt(), item.resolvedAt());
         }).toList();
