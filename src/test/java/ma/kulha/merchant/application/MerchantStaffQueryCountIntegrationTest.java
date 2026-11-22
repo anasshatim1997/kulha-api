@@ -33,8 +33,8 @@ class MerchantStaffQueryCountIntegrationTest extends AbstractApiIntegrationTest 
         long largeTeamQueries = countListQueries(owner);
 
         assertThat(smallTeamQueries)
-                .as("merchant lookup + membership page + one batched identity lookup")
-                .isEqualTo(3);
+                .as("owner lookup + approval check + membership page + one batched identity lookup")
+                .isEqualTo(4);
         assertThat(largeTeamQueries)
                 .as("adding staff must not add one identity query per membership")
                 .isEqualTo(smallTeamQueries);
