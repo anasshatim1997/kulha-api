@@ -76,6 +76,50 @@ class MerchantStaffRoleConcurrencyIntegrationTest extends AbstractApiIntegration
         }
     }
 
+    @Test
+    void enforcesZeroOrOneActiveMembershipAndSynchronizesGlobalRole() {
+        User admin = createUser("staff-invariant-admin@example.com", true,
+                ma.kulha.identity.domain.model.Role.ADMIN);
+        User ownerA = createUser("staff-invariant-owner-a@example.com", true);
+        User ownerB = createUser("staff-invariant-owner-b@example.com", true);
+        User staff = createUser("staff-invariant-member@example.com", true);
+
+        Merchant merchantA = merchantService.apply(ownerA.id(), profile("Invariant Bakery A", "+212600000011"));
+        Merchant merchantB = merchantService.apply(ownerB.id(), profile("Invariant Bakery B", "+212600000012"));
+        merchantService.approve(admin.id(), merchantA.id());
+        merchantService.approve(admin.id(), merchantB.id());
+
+        staffService.addPickupStaff(ownerA.id(), staff.email(), true, true, false);
+        assertThatThrownBy(() -> staffService.addPickupStaff(ownerB.id(), staff.email(), true, true, false))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode().value())
+                        .isEqualTo(409));
+        assertMembershipState(staff.id(), 1, true);
+
+        staffService.remove(ownerA.id(), staff.id());
+        assertMembershipState(staff.id(), 0, false);
+
+        staffService.addPickupStaff(ownerB.id(), staff.email(), true, true, false);
+        assertMembershipState(staff.id(), 1, true);
+    }
+
+    private void assertMembershipState(User staff, int expectedCount, boolean expectedRole) {
+        assertMembershipState(staff.id(), expectedCount, expectedRole);
+    }
+
+    private void assertMembershipState(java.util.UUID staffId, int expectedCount, boolean expectedRole) {
+        long activeMembershipCount = jdbc.sql("""
+                SELECT count(*) FROM merchant.merchant_memberships
+                WHERE user_id=:userId AND status='ACTIVE'
+                """).param("userId", staffId).query(Long.class).single();
+        boolean hasGlobalRole = jdbc.sql("""
+                SELECT EXISTS (SELECT 1 FROM identity.user_roles
+                               WHERE user_id=:userId AND role='MERCHANT_STAFF')
+                """).param("userId", staffId).query(Boolean.class).single();
+        assertThat(activeMembershipCount).isEqualTo(expectedCount);
+        assertThat(hasGlobalRole).isEqualTo(expectedRole);
+    }
+
     private Merchant.Profile profile(String name, String phone) {
         return new Merchant.Profile(name, BusinessType.BAKERY, "12 rue des Fleurs", "Casablanca",
                 phone, "Lun-Sam 7h-20h");
