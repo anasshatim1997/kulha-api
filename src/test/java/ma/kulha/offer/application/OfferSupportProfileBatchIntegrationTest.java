@@ -28,7 +28,7 @@ class OfferSupportProfileBatchIntegrationTest extends AbstractApiIntegrationTest
     void twentyOfferSupportProfilesUseOneOfferOwnedQuery() throws SQLException {
         User owner = createUser("offer-support-batch-owner@example.com", true);
         User admin = createUser("offer-support-batch-admin@example.com", true, Role.ADMIN);
-        UUID merchantId = merchantService.apply(owner.id(), ma.kulha.merchant.domain.model.Merchant.Profile(
+        UUID merchantId = merchantService.apply(owner.id(), new ma.kulha.merchant.domain.model.Merchant.Profile(
                 "Offer Support Shop", ma.kulha.merchant.domain.model.BusinessType.BAKERY,
                 "12 rue Atlas", "Casablanca", "+212600000099", "Lun-Sam 8h-18h")).id();
         merchantService.approve(admin.id(), merchantId);
