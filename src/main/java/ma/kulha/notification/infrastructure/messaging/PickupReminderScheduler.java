@@ -1,73 +1,87 @@
 package ma.kulha.notification.infrastructure.messaging;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import ma.kulha.identity.application.IdentityApi;
 import ma.kulha.notification.application.NotificationOutbox;
+import ma.kulha.notification.application.NotificationOutbox.PickupReminderPreferences;
+import ma.kulha.reservation.application.ReservationReminderApi;
+import ma.kulha.reservation.application.ReservationReminderApi.PickupReminderCandidate;
 import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Creates each opted-in pickup reminder once, in the same transaction as its outbox event. */
+/** Coordinates module-owned batch APIs; dispatch claims and outbox writes remain atomic. */
 @Component
 @Profile("!test")
 class PickupReminderScheduler {
-    private final JdbcClient jdbc;
-    private final NotificationOutbox outbox;
+    private static final int PAGE_SIZE = 100;
+    private static final int MAX_DISPATCHES_PER_RUN = 100;
+    private static final PickupReminderPreferences DEFAULT_PREFERENCES = new PickupReminderPreferences(true, 60);
 
-    PickupReminderScheduler(JdbcClient jdbc, NotificationOutbox outbox) {
-        this.jdbc = jdbc;
-        this.outbox = outbox;
+    private final ReservationReminderApi reservations;
+    private final NotificationOutbox notifications;
+    private final IdentityApi identities;
+
+    PickupReminderScheduler(ReservationReminderApi reservations, NotificationOutbox notifications,
+                            IdentityApi identities) {
+        this.reservations = reservations;
+        this.notifications = notifications;
+        this.identities = identities;
     }
 
     @Scheduled(fixedDelayString = "${app.notification.reminder.poll-ms:60000}")
     @Transactional
     void dispatchDueReminders() {
-        List<DueReminder> due = jdbc.sql("""
-                SELECT r.id AS reservation_id, r.customer_id, r.reference, r.merchant_name,
-                       COALESCE(p.locale, 'fr') AS locale
-                FROM reservation.reservations r
-                LEFT JOIN notification.notification_preferences np ON np.user_id = r.customer_id
-                LEFT JOIN identity.user_preferences p ON p.user_id = r.customer_id
-                WHERE r.status = 'CONFIRMED'
-                  AND r.pickup_start > now()
-                  AND COALESCE(np.pickup_reminders, TRUE) = TRUE
-                  AND r.pickup_start - (COALESCE(np.reminder_minutes_before, 60) * interval '1 minute') <= now()
-                  AND NOT EXISTS (
-                      SELECT 1 FROM notification.pickup_reminder_dispatches d
-                      WHERE d.reservation_id = r.id
-                  )
-                ORDER BY r.pickup_start
-                LIMIT 100
-                FOR UPDATE OF r SKIP LOCKED
-                """)
-                .query((rs, row) -> new DueReminder(
-                        rs.getObject("reservation_id", UUID.class),
-                        rs.getObject("customer_id", UUID.class),
-                        rs.getString("reference"), rs.getString("merchant_name"),
-                        rs.getString("locale")))
-                .list();
+        Instant now = Instant.now();
+        Instant pickupBefore = now.plus(Duration.ofDays(1));
+        Instant cursorPickupStart = null;
+        UUID cursorReservationId = null;
+        int dispatched = 0;
 
-        for (DueReminder reminder : due) {
-            int inserted = jdbc.sql("""
-                    INSERT INTO notification.pickup_reminder_dispatches (reservation_id)
-                    VALUES (:reservationId)
-                    ON CONFLICT (reservation_id) DO NOTHING
-                    """)
-                    .param("reservationId", reminder.reservationId())
-                    .update();
-            if (inserted == 0) continue;
-            Locale locale = Locale.forLanguageTag(reminder.locale());
-            outbox.enqueue(reminder.customerId(), "PICKUP_REMINDER",
-                    localized(locale, "Votre retrait approche", "Pickup starts soon", "اقترب موعد الاستلام"),
-                    localized(locale, "Votre panier chez " + reminder.merchantName() + " sera bientôt prêt.",
-                            "Your basket at " + reminder.merchantName() + " will be ready soon.",
-                            "ستكون سلتك لدى " + reminder.merchantName() + " جاهزة قريباً."),
-                    localized(locale, "Afficher mon code", "Show my code", "عرض رمز الاستلام"),
-                    "/reservations/" + reminder.reference());
+        while (dispatched < MAX_DISPATCHES_PER_RUN) {
+            List<PickupReminderCandidate> page = reservations.findConfirmedUpcoming(
+                    now, pickupBefore, cursorPickupStart, cursorReservationId, PAGE_SIZE);
+            if (page.isEmpty()) break;
+
+            Set<UUID> userIds = page.stream().map(PickupReminderCandidate::customerId)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            Map<UUID, PickupReminderPreferences> preferences = notifications.findPickupReminderPreferences(userIds);
+            Map<UUID, String> locales = identities.findLocales(userIds);
+
+            for (PickupReminderCandidate candidate : page) {
+                cursorPickupStart = candidate.pickupStart();
+                cursorReservationId = candidate.reservationId();
+
+                PickupReminderPreferences preference = preferences.getOrDefault(
+                        candidate.customerId(), DEFAULT_PREFERENCES);
+                if (!preference.enabled()
+                        || candidate.pickupStart().minus(Duration.ofMinutes(preference.minutesBefore())).isAfter(now)) {
+                    continue;
+                }
+                if (!notifications.markPickupReminderDispatched(candidate.reservationId())) continue;
+
+                Locale locale = Locale.forLanguageTag(locales.getOrDefault(candidate.customerId(), "fr"));
+                notifications.enqueue(candidate.customerId(), "PICKUP_REMINDER",
+                        localized(locale, "Votre retrait approche", "Pickup starts soon", "اقترب موعد الاستلام"),
+                        localized(locale, "Votre panier chez " + candidate.merchantName() + " sera bientôt prêt.",
+                                "Your basket at " + candidate.merchantName() + " will be ready soon.",
+                                "ستكون سلتك لدى " + candidate.merchantName() + " جاهزة قريباً."),
+                        localized(locale, "Afficher mon code", "Show my code", "عرض رمز الاستلام"),
+                        "/reservations/" + candidate.reference());
+                dispatched++;
+                if (dispatched >= MAX_DISPATCHES_PER_RUN) break;
+            }
+
+            if (page.size() < PAGE_SIZE) break;
         }
     }
 
@@ -78,7 +92,4 @@ class PickupReminderScheduler {
             default -> fr;
         };
     }
-
-    private record DueReminder(UUID reservationId, UUID customerId, String reference,
-                               String merchantName, String locale) {}
 }
