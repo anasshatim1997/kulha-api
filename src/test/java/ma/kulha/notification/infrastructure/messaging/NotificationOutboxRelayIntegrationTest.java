@@ -13,7 +13,6 @@ import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 class NotificationOutboxRelayIntegrationTest extends AbstractApiIntegrationTest {
 
@@ -25,8 +24,7 @@ class NotificationOutboxRelayIntegrationTest extends AbstractApiIntegrationTest 
         jdbc.sql("DELETE FROM notification.outbox_events").update();
         UUID eventId = insertOutboxEvent("notification.created", 0);
         RabbitTemplate rabbit = mock(RabbitTemplate.class);
-        NotificationOutboxRelay relay = new NotificationOutboxRelay(jdbc, rabbit);
-        TransactionTemplate transactions = new TransactionTemplate(transactionManager);
+        NotificationOutboxRelay relay = new NotificationOutboxRelay(jdbc, rabbit, transactionManager);
 
         doAnswer(invocation -> {
             CorrelationData correlation = invocation.getArgument(3);
@@ -34,7 +32,7 @@ class NotificationOutboxRelayIntegrationTest extends AbstractApiIntegrationTest 
             return null;
         }).when(rabbit).convertAndSend(anyString(), anyString(), anyString(), any(CorrelationData.class));
 
-        transactions.executeWithoutResult(status -> relay.publishPending());
+        relay.publishPending();
 
         var retry = jdbc.sql("""
                 SELECT attempt_count, published_at, dead_lettered_at, available_at
@@ -77,8 +75,7 @@ class NotificationOutboxRelayIntegrationTest extends AbstractApiIntegrationTest 
             return null;
         }).when(rabbit).convertAndSend(anyString(), anyString(), anyString(), any(CorrelationData.class));
 
-        TransactionTemplate transactions = new TransactionTemplate(transactionManager);
-        transactions.executeWithoutResult(status -> new NotificationOutboxRelay(jdbc, rabbit).publishPending());
+        new NotificationOutboxRelay(jdbc, rabbit, transactionManager).publishPending();
 
         var deadLetter = jdbc.sql("""
                 SELECT attempt_count, dead_lettered_at, payload::text AS payload
