@@ -2,6 +2,8 @@
 -- The reservation, pickup credential, notification outbox event and exact HTTP
 -- response snapshot are committed in the same transaction by ReservationService.
 CREATE TABLE reservation.idempotency_keys (
+    -- Identity is a separate module; validate the authenticated customer in the application layer.
+    -- ADR 001 forbids a cross-module FK here.
     customer_id UUID NOT NULL,
     idempotency_key VARCHAR(128) NOT NULL,
     request_hash CHAR(64) NOT NULL,
