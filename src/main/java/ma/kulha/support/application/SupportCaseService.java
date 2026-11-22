@@ -237,7 +237,7 @@ public class SupportCaseService {
     @Transactional
     public CustomerDetails revealCustomer(UUID actorId, String reference, String reason) {
         String cleanReason = reason == null ? "" : reason.trim();
-        if (cleanReason.isEmpty() || cleanReason.length() > 1000) {
+        if (cleanReason.isEmpty() || cleanReason.length() > 500) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A disclosure reason is required.");
         }
         CaseSummary item = requireCaseAccess(actorId, reference);
