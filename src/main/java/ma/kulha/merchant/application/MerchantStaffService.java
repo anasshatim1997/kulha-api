@@ -2,6 +2,8 @@ package ma.kulha.merchant.application;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import ma.kulha.shared.identity.UserAccountDirectory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -38,15 +40,22 @@ public class MerchantStaffService {
                         rs.getBoolean("can_validate_pickups"), rs.getBoolean("can_view_orders"),
                         rs.getBoolean("can_manage_offers"))).list();
 
+        List<UUID> accountIds = new java.util.ArrayList<>();
+        accountIds.add(ownerUserId);
+        memberships.forEach(membership -> accountIds.add(membership.userId()));
+        Map<UUID, UserAccountDirectory.Account> accounts = new HashMap<>();
+        users.findAccountsByIds(accountIds).forEach(account -> accounts.put(account.id(), account));
+
         List<StaffMember> team = new java.util.ArrayList<>();
-        users.findAccountById(ownerUserId).ifPresent(owner -> team.add(new StaffMember(
-                owner.id(), owner.email(), owner.fullName(), "OWNER", Instant.EPOCH, true, true, true)));
-        memberships.stream()
-                .flatMap(membership -> users.findAccountById(membership.userId()).stream()
-                        .map(account -> new StaffMember(account.id(), account.email(), account.fullName(),
-                                membership.role(), membership.addedAt(), membership.canValidatePickups(),
-                                membership.canViewOrders(), membership.canManageOffers())))
-                .forEach(team::add);
+        UserAccountDirectory.Account owner = accounts.get(ownerUserId);
+        if (owner != null) team.add(new StaffMember(
+                owner.id(), owner.email(), owner.fullName(), "OWNER", Instant.EPOCH, true, true, true));
+        for (MembershipRow membership : memberships) {
+            UserAccountDirectory.Account account = accounts.get(membership.userId());
+            if (account != null) team.add(new StaffMember(
+                    account.id(), account.email(), account.fullName(), membership.role(), membership.addedAt(),
+                    membership.canValidatePickups(), membership.canViewOrders(), membership.canManageOffers()));
+        }
         return List.copyOf(team);
     }
 
@@ -68,6 +77,7 @@ public class MerchantStaffService {
         boolean validate = canValidatePickups == null || canValidatePickups;
         boolean view = canViewOrders == null || canViewOrders;
         boolean offers = Boolean.TRUE.equals(canManageOffers);
+        lockMembershipMutations(staff.id());
         try {
             jdbc.sql("""
                     INSERT INTO merchant.merchant_memberships
@@ -111,6 +121,7 @@ public class MerchantStaffService {
     @Transactional
     public void remove(UUID ownerUserId, UUID staffUserId) {
         UUID merchantId = ownerMerchant(ownerUserId);
+        lockMembershipMutations(staffUserId);
         int removed = jdbc.sql("""
                 UPDATE merchant.merchant_memberships
                 SET status = 'REVOKED', updated_at = now()
@@ -122,6 +133,17 @@ public class MerchantStaffService {
                                WHERE user_id = :userId AND status = 'ACTIVE')
                 """).param("userId", staffUserId).query(Boolean.class).single();
         if (!hasAnotherActiveMembership) users.revokePickupStaff(staffUserId);
+    }
+
+    /**
+     * Serializes membership changes for one identity across all merchant tenants.
+     * The global MERCHANT_STAFF role must reflect whether any active membership exists.
+     */
+    private void lockMembershipMutations(UUID staffUserId) {
+        jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:userId, 0)) IS NULL")
+                .param("userId", staffUserId.toString())
+                .query(Boolean.class)
+                .single();
     }
 
     private UUID ownerMerchant(UUID ownerUserId) {

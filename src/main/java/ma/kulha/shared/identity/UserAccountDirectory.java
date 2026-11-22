@@ -1,5 +1,7 @@
 package ma.kulha.shared.identity;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import ma.kulha.identity.domain.model.Role;
@@ -13,8 +15,14 @@ public interface UserAccountDirectory {
     /** True only for active users authorized to handle support cases. */
     boolean isEligibleSupportCaseAssignee(UUID userId);
 
-    /** Active-account roles, resolved in one identity-module lookup. */
+    /** Active-account roles, resolved in one identity lookup. */
     Set<Role> findActiveRoles(UUID userId);
+
+    /** Batch lookup used by tenant-scoped staff lists to avoid one identity query per member. */
+    default List<Account> findAccountsByIds(Collection<UUID> userIds) {
+        return userIds.stream().distinct().map(this::findAccountById)
+                .flatMap(Optional::stream).toList();
+    }
     void grantPickupStaff(UUID userId);
     void revokePickupStaff(UUID userId);
 
