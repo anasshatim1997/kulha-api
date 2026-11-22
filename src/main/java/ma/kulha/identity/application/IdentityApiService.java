@@ -69,6 +69,37 @@ class IdentityApiService implements IdentityApi {
     }
 
     @Override
+    public UserPreferences getUserPreferences(UUID userId, String defaultLocale) {
+        jdbc.sql("""
+                INSERT INTO identity.user_preferences (user_id, locale)
+                VALUES (:userId, :locale) ON CONFLICT (user_id) DO NOTHING
+                """).param("userId", userId).param("locale", defaultLocale).update();
+        return jdbc.sql("""
+                SELECT preferred_city, preferred_district, locale
+                FROM identity.user_preferences WHERE user_id = :userId
+                """).param("userId", userId)
+                .query((rs, row) -> new UserPreferences(rs.getString("preferred_city"),
+                        rs.getString("preferred_district"), rs.getString("locale")))
+                .single();
+    }
+
+    @Override
+    public UserPreferences updateUserPreferences(UUID userId, UserPreferences preferences) {
+        jdbc.sql("""
+                INSERT INTO identity.user_preferences
+                    (user_id, preferred_city, preferred_district, locale, updated_at)
+                VALUES (:userId, :city, :district, :locale, now())
+                ON CONFLICT (user_id) DO UPDATE SET
+                    preferred_city = EXCLUDED.preferred_city,
+                    preferred_district = EXCLUDED.preferred_district,
+                    locale = EXCLUDED.locale,
+                    updated_at = now()
+                """).param("userId", userId).param("city", preferences.preferredCity())
+                .param("district", preferences.preferredDistrict()).param("locale", preferences.locale()).update();
+        return preferences;
+    }
+
+    @Override
     public Set<String> findActiveRoleNames(UUID userId) {
         return Set.copyOf(jdbc.sql("""
                 SELECT r.role FROM identity.user_roles r
