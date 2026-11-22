@@ -53,6 +53,14 @@ public class IdentityUserAccountDirectory implements UserAccountDirectory {
                 .list();
     }
 
+    @Override
+    public boolean isEligibleSupportCaseAssignee(UUID userId) {
+        return users.findById(userId)
+                .filter(user -> user.status() == UserStatus.ACTIVE)
+                .filter(user -> user.hasRole(Role.SUPPORT) || user.hasRole(Role.ADMIN) || user.hasRole(Role.SUPER_ADMIN))
+                .isPresent();
+    }
+
     private Account toAccount(User user) {
         return new Account(user.id(), user.email(), user.fullName(),
                 user.status() == UserStatus.ACTIVE, user.isEmailVerified(),
