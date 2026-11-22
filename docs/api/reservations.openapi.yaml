@@ -46,7 +46,13 @@ paths:
         "200": { description: Customer reservations with server-derived classification. }
     post:
       security: [{ bearerAuth: [] }]
-      description: Creates and confirms a pickup reservation. Client prices are rejected; the server reads current offer pricing.
+      description: Creates and confirms a pickup reservation. Client prices are rejected; the server reads current offer pricing. The response is durably replayed for the same authenticated customer and Idempotency-Key; reuse with a different request fingerprint returns 409.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          description: Stable client-generated key for one reservation creation attempt. Use the same key for retries of the same request.
+          schema: { type: string, minLength: 1, maxLength: 128 }
       requestBody:
         required: true
         content:
@@ -63,7 +69,7 @@ paths:
                 totalPriceMinor: { type: integer, deprecated: true, description: Rejected; server calculated. }
       responses:
         "201": { description: Confirmed reservation with reference and pickup code. }
-        "409": { description: Inventory or pickup window conflict. }
+        "409": { description: Inventory or pickup window conflict, or Idempotency-Key reused with a different request fingerprint. }
   /reservations/{reference}:
     get:
       security: [{ bearerAuth: [] }]

@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 @RestController
@@ -37,8 +38,9 @@ public class ReservationController {
     }
     @PostMapping
     ResponseEntity<ReservationResponse> create(@Valid @RequestBody CreateReservationRequest request,
-            Authentication authentication) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(reservations.create(userId(authentication), request, locale()));
+            @RequestHeader("Idempotency-Key") String idempotencyKey, Authentication authentication) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(reservations.create(userId(authentication), request, locale(), idempotencyKey));
     }
     @GetMapping
     PageResponse<ReservationResponse> list(@RequestParam(defaultValue = "upcoming") String status,
