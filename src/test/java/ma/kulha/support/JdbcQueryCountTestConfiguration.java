@@ -12,7 +12,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 
 @TestConfiguration
-class JdbcQueryCountTestConfiguration {
+public class JdbcQueryCountTestConfiguration {
     @Bean
     static BeanPostProcessor queryCountingDataSourcePostProcessor() {
         return new BeanPostProcessor() {
