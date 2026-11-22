@@ -183,6 +183,24 @@ class JdbcOfferRepository implements OfferRepository {
     }
 
     @Override
+    public List<Offer> listForAdminModeration(OfferStatus status, int limit, int offset) {
+        String filter = status == null ? "" : " AND status=:status";
+        JdbcClient.StatementSpec query = jdbc.sql(SELECT + " WHERE TRUE" + filter
+                        + " ORDER BY CASE WHEN status='SUSPENDED' THEN 0 WHEN status='UNPUBLISHED' THEN 1 ELSE 2 END, updated_at DESC, id LIMIT :limit OFFSET :offset")
+                .param("limit", limit).param("offset", offset);
+        if (status != null) query = query.param("status", status.name());
+        return query.query(JdbcOfferRepository::mapOffer).list();
+    }
+
+    @Override
+    public long countForAdminModeration(OfferStatus status) {
+        String filter = status == null ? "" : " AND status=:status";
+        JdbcClient.StatementSpec query = jdbc.sql("SELECT count(*) FROM offer.offers WHERE TRUE" + filter);
+        if (status != null) query = query.param("status", status.name());
+        return query.query(Long.class).single();
+    }
+
+    @Override
     public List<Offer> findPublishedByMerchant(UUID merchantId) {
         return jdbc.sql(SELECT + " WHERE merchant_id=:merchant AND status='PUBLISHED' ORDER BY id")
                 .param("merchant", merchantId).query(JdbcOfferRepository::mapOffer).list();
