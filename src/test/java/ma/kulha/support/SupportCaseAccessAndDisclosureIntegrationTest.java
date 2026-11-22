@@ -113,7 +113,7 @@ class SupportCaseAccessAndDisclosureIntegrationTest extends AbstractApiIntegrati
         assertThat(disclosureAuditReason(reference)).isEqualTo("Escalated identity verification");
     }
 
-    private String bearer(User user) {
+    private String bearer(User user) throws Exception {
         return "Bearer " + tokenFor(user);
     }
 
