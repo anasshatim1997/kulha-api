@@ -36,9 +36,15 @@ public class AdminAuditQueryService {
     @Transactional(readOnly = true)
     public AuditPage list(LocalDate from, LocalDate to, UUID actorId, String action, String result,
                           int page, int size) {
+        return list(from, to, actorId, action, result, null, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public AuditPage list(LocalDate from, LocalDate to, UUID actorId, String action, String result,
+                          String query, int page, int size) {
         int safePage = Math.max(0, page);
         int safeSize = Math.clamp(size, 1, 5000);
-        Filter filter = filter(from, to, actorId, action, result);
+        Filter filter = filter(from, to, actorId, action, result, query);
         List<AuditRow> rows = queryRows(filter, safeSize, safePage * safeSize);
         long total = count(filter);
         return new AuditPage(enrichActorNames(rows), safePage, safeSize, total);
@@ -61,7 +67,16 @@ public class AdminAuditQueryService {
         audit.append(adminId, "ADMIN_AUDIT_EXPORTED", "AUDIT_LOG", "QUERY", "Filtered export", "SUCCESS");
         writer.write("time,actor,action,record,reason,result,correlation_id\n");
 
-        Filter filter = filter(from, to, actorId, action, result);
+        writeExport(adminId, from, to, actorId, action, result, null, writer);
+    }
+
+    @Transactional
+    public void writeExport(UUID adminId, LocalDate from, LocalDate to, UUID actorId, String action, String result,
+                            String query, Writer writer) throws IOException {
+        audit.append(adminId, "ADMIN_AUDIT_EXPORTED", "AUDIT_LOG", "QUERY", "Filtered export", "SUCCESS");
+        writer.write("time,actor,action,record,reason,result,correlation_id\\n");
+
+        Filter filter = filter(from, to, actorId, action, result, query);
         OffsetDateTime cursorCreatedAt = null;
         UUID cursorId = null;
         while (true) {
@@ -96,15 +111,19 @@ public class AdminAuditQueryService {
         writer.write('\n');
     }
 
-    private Filter filter(LocalDate from, LocalDate to, UUID actorId, String action, String result) {
+    private Filter filter(LocalDate from, LocalDate to, UUID actorId, String action, String result, String query) {
         List<String> clauses = new ArrayList<>();
         if (from != null) clauses.add("(a.created_at AT TIME ZONE 'Africa/Casablanca')::date >= :fromDate");
         if (to != null) clauses.add("(a.created_at AT TIME ZONE 'Africa/Casablanca')::date <= :toDate");
         if (actorId != null) clauses.add("a.actor_user_id = :actorId");
         if (action != null && !action.isBlank()) clauses.add("a.action = :action");
         if (result != null && !result.isBlank()) clauses.add("a.result = :result");
+        if (query != null && !query.isBlank()) clauses.add("""
+                (a.action ILIKE :query OR a.target_type ILIKE :query OR a.target_id ILIKE :query
+                 OR COALESCE(a.reason, '') ILIKE :query OR COALESCE(a.correlation_id, '') ILIKE :query)
+                """.trim());
         return new Filter(clauses.isEmpty() ? "" : " WHERE " + String.join(" AND ", clauses),
-                from, to, actorId, action, result);
+                from, to, actorId, action, result, query == null ? null : query.trim());
     }
 
     private long count(Filter filter) {
@@ -154,6 +173,7 @@ public class AdminAuditQueryService {
         if (filter.actorId() != null) query = query.param("actorId", filter.actorId());
         if (filter.action() != null && !filter.action().isBlank()) query = query.param("action", filter.action());
         if (filter.result() != null && !filter.result().isBlank()) query = query.param("result", filter.result());
+        if (filter.query() != null && !filter.query().isBlank()) query = query.param("query", "%" + filter.query() + "%");
         return query;
     }
 
@@ -170,7 +190,7 @@ public class AdminAuditQueryService {
         }).toList();
     }
 
-    private record Filter(String where, LocalDate from, LocalDate to, UUID actorId, String action, String result) {}
+    private record Filter(String where, LocalDate from, LocalDate to, UUID actorId, String action, String result, String query) {}
     public record AuditRow(UUID id, UUID actorUserId, String actorName, String action, String targetType,
                            String targetId, String reason, String result, String correlationId,
                            java.time.Instant createdAt) {}
