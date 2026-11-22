@@ -207,8 +207,8 @@ public class SupportCaseService {
     public void act(UUID adminId, String reference, String action, String reason) {
         Set<String> roles = identities.findActiveRoleNames(adminId);
         CaseSummary item = requireCaseAccess(adminId, reference, roles);
-        boolean supportOnly = roles.contains(Role.SUPPORT)
-                && !roles.contains(Role.ADMIN) && !roles.contains(Role.SUPER_ADMIN);
+        boolean supportOnly = roles.contains("SUPPORT")
+                && !roles.contains("ADMIN") && !roles.contains("SUPER_ADMIN");
         if (supportOnly && "KEEP_OFFER_HIDDEN".equals(action)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Offer moderation is not part of support-agent access.");
         }
@@ -268,9 +268,9 @@ public class SupportCaseService {
         }
         Set<String> roles = identities.findActiveRoleNames(actorId);
         CaseSummary item = requireCaseAccess(actorId, reference, roles);
-        boolean superAdministrator = roles.contains(Role.SUPER_ADMIN);
-        boolean assignedSupport = !roles.contains(Role.ADMIN)
-                && !superAdministrator && roles.contains(Role.SUPPORT)
+        boolean superAdministrator = roles.contains("SUPER_ADMIN");
+        boolean assignedSupport = !roles.contains("ADMIN")
+                && !superAdministrator && roles.contains("SUPPORT")
                 && actorId.equals(item.assignedTo());
         if (!superAdministrator && !assignedSupport) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Customer disclosure is not permitted.");
@@ -287,9 +287,9 @@ public class SupportCaseService {
     }
 
     private CaseSummary requireCaseAccess(UUID actorId, String reference, Set<String> roles) {
-        boolean superAdministrator = roles.contains(Role.SUPER_ADMIN);
-        boolean administrator = roles.contains(Role.ADMIN);
-        boolean support = roles.contains(Role.SUPPORT);
+        boolean superAdministrator = roles.contains("SUPER_ADMIN");
+        boolean administrator = roles.contains("ADMIN");
+        boolean support = roles.contains("SUPPORT");
         if (!superAdministrator && !administrator && !support) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Support case access denied.");
         }
@@ -301,8 +301,8 @@ public class SupportCaseService {
     }
 
     private void requireAdministrator(UUID actorId) {
-        Set<Role> roles = userAccounts.findActiveRoles(actorId);
-        if (!roles.contains(Role.ADMIN) && !roles.contains(Role.SUPER_ADMIN)) {
+        Set<String> roles = identities.findActiveRoleNames(actorId);
+        if (!roles.contains("ADMIN") && !roles.contains("SUPER_ADMIN")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Administrative support access required.");
         }
     }
