@@ -3,6 +3,7 @@ package ma.kulha.notification.application;
 import java.time.Instant;
 import java.util.UUID;
 import ma.kulha.notification.domain.NotificationEvent;
+import ma.kulha.identity.application.IdentityApi;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,11 +16,13 @@ public class NotificationOutbox {
     private final JdbcClient jdbc;
     private final ObjectMapper objectMapper;
     private final EmailOutbox emailOutbox;
+    private final IdentityApi identities;
 
-    public NotificationOutbox(JdbcClient jdbc, ObjectMapper objectMapper, EmailOutbox emailOutbox) {
+    public NotificationOutbox(JdbcClient jdbc, ObjectMapper objectMapper, EmailOutbox emailOutbox, IdentityApi identities) {
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
         this.emailOutbox = emailOutbox;
+        this.identities = identities;
     }
 
     @Transactional
@@ -40,11 +43,8 @@ public class NotificationOutbox {
                     .param("payload", payload)
                     .update();
             if (shouldEmail(userId, type)) {
-                String email = jdbc.sql("SELECT email FROM identity.users WHERE id = :userId")
-                        .param("userId", userId)
-                        .query(String.class)
-                        .single();
-                emailOutbox.enqueue(email, EmailTemplates.notification(title, message));
+                identities.emailOf(userId).ifPresent(email ->
+                        emailOutbox.enqueue(email, EmailTemplates.notification(title, message)));
             }
             return eventId;
         } catch (JacksonException exception) {
@@ -63,13 +63,13 @@ public class NotificationOutbox {
                         WHEN 'RESERVATION_EXPIRED' THEN COALESCE(p.cancellations_and_status_changes, TRUE)
                         ELSE TRUE
                     END
-                FROM identity.users u
-                LEFT JOIN notification.notification_preferences p ON p.user_id = u.id
-                WHERE u.id = :userId
+                FROM notification.notification_preferences p
+                WHERE p.user_id = :userId
                 """)
                 .param("userId", userId)
                 .param("type", type)
                 .query(Boolean.class)
-                .single();
+                .optional()
+                .orElse(true);
     }
 }
