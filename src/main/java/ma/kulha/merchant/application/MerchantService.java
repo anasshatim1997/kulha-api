@@ -91,8 +91,13 @@ public class MerchantService {
     }
 
     public AdminMerchantView approve(UUID adminId, UUID merchantId) {
-        return decide(adminId, merchantId, "MERCHANT_APPROVED", null,
-                (merchant, now) -> merchant.approve(adminId, now),
+        return approve(adminId, merchantId, "Merchant approved.");
+    }
+
+    public AdminMerchantView approve(UUID adminId, UUID merchantId, String reason) {
+        String approvalReason = reason == null || reason.isBlank() ? "Commerce approuvé." : reason.trim();
+        return decide(adminId, merchantId, "MERCHANT_APPROVED", approvalReason,
+                (merchant, now) -> merchant.approve(adminId, approvalReason, now),
                 identity::grantMerchantRole, TemplateKey.MERCHANT_APPROVED);
     }
 
@@ -100,6 +105,12 @@ public class MerchantService {
         return decide(adminId, merchantId, "MERCHANT_REJECTED", reason,
                 (merchant, now) -> merchant.reject(adminId, reason, now),
                 ownerId -> { }, TemplateKey.MERCHANT_REJECTED);
+    }
+
+    public AdminMerchantView requestInformation(UUID adminId, UUID merchantId, String reason) {
+        return decide(adminId, merchantId, "MERCHANT_INFO_REQUIRED", reason,
+                (merchant, now) -> merchant.requestInformation(adminId, reason, now),
+                ownerId -> { }, TemplateKey.MERCHANT_INFO_REQUIRED);
     }
 
     public AdminMerchantView suspend(UUID adminId, UUID merchantId, String reason) {

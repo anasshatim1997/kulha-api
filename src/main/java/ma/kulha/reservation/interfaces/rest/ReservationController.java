@@ -9,6 +9,7 @@ import ma.kulha.reservation.interfaces.dto.CollectReservationRequest;
 import ma.kulha.reservation.interfaces.dto.CreateReservationRequest;
 import ma.kulha.reservation.interfaces.dto.ReservationAvailabilityResponse;
 import ma.kulha.reservation.interfaces.dto.ReservationResponse;
+import ma.kulha.reservation.interfaces.dto.PickupPreviewResponse;
 import ma.kulha.shared.web.PageResponse;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.HttpStatus;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 @RestController
@@ -36,8 +38,9 @@ public class ReservationController {
     }
     @PostMapping
     ResponseEntity<ReservationResponse> create(@Valid @RequestBody CreateReservationRequest request,
-            Authentication authentication) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(reservations.create(userId(authentication), request, locale()));
+            @RequestHeader("Idempotency-Key") String idempotencyKey, Authentication authentication) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(reservations.create(userId(authentication), request, locale(), idempotencyKey));
     }
     @GetMapping
     PageResponse<ReservationResponse> list(@RequestParam(defaultValue = "upcoming") String status,
@@ -54,6 +57,10 @@ public class ReservationController {
     ReservationResponse cancel(@PathVariable String reference, @Valid @RequestBody(required = false) CancelReservationRequest request,
             Authentication authentication) {
         return reservations.cancel(reference, userId(authentication), request, locale());
+    }
+    @PostMapping("/pickup/check")
+    PickupPreviewResponse previewPickup(@Valid @RequestBody CollectReservationRequest request, Authentication authentication) {
+        return reservations.previewPickup(request, userId(authentication));
     }
     @PostMapping("/collect")
     ReservationResponse collect(@Valid @RequestBody CollectReservationRequest request, Authentication authentication) {

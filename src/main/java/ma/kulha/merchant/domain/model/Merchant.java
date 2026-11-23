@@ -157,6 +157,13 @@ public record Merchant(
         return decided(MerchantStatus.APPROVED, null, adminId, now);
     }
 
+    public Merchant approve(UUID adminId, String reason, Instant now) {
+        if (status != MerchantStatus.PENDING && status != MerchantStatus.SUSPENDED) {
+            throw new InvalidMerchantStateException("Only a pending or suspended merchant can be approved.");
+        }
+        return decided(MerchantStatus.APPROVED, requireReason(reason), adminId, now);
+    }
+
     public Merchant reject(UUID adminId, String reason, Instant now) {
         if (status != MerchantStatus.PENDING) {
             throw new InvalidMerchantStateException("Only a pending merchant can be rejected.");
@@ -176,7 +183,7 @@ public record Merchant(
         if (status == MerchantStatus.SUSPENDED) {
             throw new InvalidMerchantStateException("A suspended merchant cannot edit its profile.");
         }
-        boolean resubmitted = status == MerchantStatus.REJECTED;
+        boolean resubmitted = status == MerchantStatus.REJECTED || status == MerchantStatus.INFO_REQUIRED;
         Double nextLatitude = profile.latitude() == null ? latitude : profile.latitude();
         Double nextLongitude = profile.longitude() == null ? longitude : profile.longitude();
         return new Merchant(id, ownerUserId, profile.name(), profile.businessType(),
@@ -187,6 +194,11 @@ public record Merchant(
                 resubmitted ? null : decidedBy,
                 resubmitted ? null : decidedAt,
                 createdAt, now);
+    }
+
+    public Merchant requestInformation(UUID adminId, String reason, Instant now) {
+        if (status != MerchantStatus.PENDING) throw new InvalidMerchantStateException("Only a pending merchant can be asked for more information.");
+        return decided(MerchantStatus.INFO_REQUIRED, requireReason(reason), adminId, now);
     }
 
     private Merchant decided(MerchantStatus newStatus, String reason, UUID adminId, Instant now) {

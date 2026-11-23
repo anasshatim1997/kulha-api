@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
 import ma.kulha.reservation.domain.model.Reservation;
@@ -53,6 +54,12 @@ class JdbcReservationRepository implements ReservationRepository {
     @Override public Optional<Reservation> findByReference(String reference) {
         return jdbc.sql(SELECT + " WHERE reference = :reference").param("reference", reference)
                 .query(JdbcReservationRepository::map).optional();
+    }
+    @Override public List<Reservation> findByReferences(Collection<String> references) {
+        List<String> distinct = references == null ? List.of() : references.stream().distinct().toList();
+        if (distinct.isEmpty()) return List.of();
+        return jdbc.sql(SELECT + " WHERE reference IN (:references) ORDER BY reference")
+                .param("references", distinct).query(JdbcReservationRepository::map).list();
     }
     @Override public Optional<Reservation> findByReferenceForUpdate(String reference) {
         return jdbc.sql(SELECT + " WHERE reference = :reference FOR UPDATE").param("reference", reference)

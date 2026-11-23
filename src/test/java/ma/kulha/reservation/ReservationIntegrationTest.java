@@ -7,7 +7,13 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import ma.kulha.identity.domain.model.Role;
 import ma.kulha.identity.domain.model.User;
 import ma.kulha.support.AbstractApiIntegrationTest;
@@ -165,11 +171,137 @@ class ReservationIntegrationTest extends AbstractApiIntegrationTest {
                 .param("ref", reference).query(String.class).single()).isEqualTo("Travel plans changed");
     }
 
+    @Test
+    void concurrentCustomersCannotOversellTheLastAvailableUnit() throws Exception {
+        User firstCustomer = createUser("reservation-race-a@example.test", true);
+        User secondCustomer = createUser("reservation-race-b@example.test", true);
+        Fixture fixture = fixture(1, Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200));
+        String firstToken = tokenFor(firstCustomer);
+        String secondToken = tokenFor(secondCustomer);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<MockHttpServletResponse> first = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Race start timed out.");
+                return create(firstToken, fixture, 1);
+            });
+            Future<MockHttpServletResponse> second = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Race start timed out.");
+                return create(secondToken, fixture, 1);
+            });
+
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            List<Integer> statuses = List.of(first.get(10, TimeUnit.SECONDS).getStatus(),
+                    second.get(10, TimeUnit.SECONDS).getStatus());
+
+            assertThat(statuses).containsExactlyInAnyOrder(201, 409);
+            assertThat(jdbc.sql("SELECT quantity_reserved FROM offer.offers WHERE id=:id")
+                    .param("id", fixture.offerId()).query(Integer.class).single()).isEqualTo(1);
+            assertThat(jdbc.sql("SELECT count(*) FROM reservation.reservations WHERE offer_id=:id")
+                    .param("id", fixture.offerId()).query(Long.class).single()).isEqualTo(1L);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void replaysTheExactReservationResponseForTheSameCustomerAndIdempotencyKey() throws Exception {
+        User customer = createUser("reservation-idempotency-replay@example.test", true);
+        Fixture fixture = fixture(5, Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200));
+        String token = tokenFor(customer);
+        String key = UUID.randomUUID().toString();
+
+        MockHttpServletResponse first = create(token, fixture, 2, key);
+        MockHttpServletResponse replay = create(token, fixture, 2, key);
+
+        assertThat(first.getStatus()).isEqualTo(201);
+        assertThat(replay.getStatus()).isEqualTo(201);
+        assertThat(replay.getContentAsString()).isEqualTo(first.getContentAsString());
+        assertThat(jdbc.sql("SELECT count(*) FROM reservation.reservations WHERE customer_id=:customer")
+                .param("customer", customer.id()).query(Long.class).single()).isEqualTo(1L);
+        assertThat(jdbc.sql("SELECT quantity_reserved FROM offer.offers WHERE id=:id")
+                .param("id", fixture.offerId()).query(Integer.class).single()).isEqualTo(2);
+        assertThat(jdbc.sql("SELECT count(*) FROM reservation.idempotency_keys WHERE customer_id=:customer AND idempotency_key=:key")
+                .param("customer", customer.id()).param("key", key).query(Long.class).single()).isEqualTo(1L);
+    }
+
+    @Test
+    void rejectsReusingReservationIdempotencyKeyWithDifferentRequestFingerprint() throws Exception {
+        User customer = createUser("reservation-idempotency-conflict@example.test", true);
+        Fixture fixture = fixture(5, Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200));
+        String token = tokenFor(customer);
+        String key = UUID.randomUUID().toString();
+
+        MockHttpServletResponse first = create(token, fixture, 1, key);
+        MockHttpServletResponse conflict = create(token, fixture, 2, key);
+
+        assertThat(first.getStatus()).isEqualTo(201);
+        assertThat(conflict.getStatus()).isEqualTo(409);
+        assertThat(conflict.getContentAsString()).contains("RESERVATION_CONFLICT");
+        assertThat(jdbc.sql("SELECT count(*) FROM reservation.reservations WHERE customer_id=:customer")
+                .param("customer", customer.id()).query(Long.class).single()).isEqualTo(1L);
+        assertThat(jdbc.sql("SELECT quantity_reserved FROM offer.offers WHERE id=:id")
+                .param("id", fixture.offerId()).query(Integer.class).single()).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentRequestsWithSameReservationKeyCreateOnlyOneReservation() throws Exception {
+        User customer = createUser("reservation-idempotency-race@example.test", true);
+        Fixture fixture = fixture(5, Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200));
+        String token = tokenFor(customer);
+        String key = UUID.randomUUID().toString();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<MockHttpServletResponse> first = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Race start timed out.");
+                return create(token, fixture, 2, key);
+            });
+            Future<MockHttpServletResponse> second = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Race start timed out.");
+                return create(token, fixture, 2, key);
+            });
+
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            MockHttpServletResponse firstResponse = first.get(10, TimeUnit.SECONDS);
+            MockHttpServletResponse secondResponse = second.get(10, TimeUnit.SECONDS);
+
+            assertThat(firstResponse.getStatus()).isEqualTo(201);
+            assertThat(secondResponse.getStatus()).isEqualTo(201);
+            assertThat(firstResponse.getContentAsString()).isEqualTo(secondResponse.getContentAsString());
+            assertThat(jdbc.sql("SELECT count(*) FROM reservation.reservations WHERE customer_id=:customer")
+                    .param("customer", customer.id()).query(Long.class).single()).isEqualTo(1L);
+            assertThat(jdbc.sql("SELECT quantity_reserved FROM offer.offers WHERE id=:id")
+                    .param("id", fixture.offerId()).query(Integer.class).single()).isEqualTo(2);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private MockHttpServletResponse create(String token, Fixture fixture, int quantity) throws Exception {
+        return create(token, fixture, quantity, UUID.randomUUID().toString());
+    }
+
+    private MockHttpServletResponse create(String token, Fixture fixture, int quantity, String idempotencyKey)
+            throws Exception {
         String body = """
                 {"offerId":"%s","quantity":%d,"pickupStart":"%s","pickupEnd":"%s"}
                 """.formatted(fixture.offerId(), quantity, fixture.pickupStart(), fixture.pickupEnd());
-        return doPost("/api/v1/reservations", body, token);
+        return mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .post("/api/v1/reservations")
+                .header("Authorization", "Bearer " + token)
+                .header("Idempotency-Key", idempotencyKey)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content(body)).andReturn().getResponse();
     }
 
     private Fixture fixture(int quantity, Instant pickupStart, Instant pickupEnd) {

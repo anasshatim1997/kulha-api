@@ -44,10 +44,12 @@ public abstract class AbstractApiIntegrationTest {
 
     @BeforeEach
     protected void resetState() {
+        jdbc.sql("DELETE FROM admin.support_cases").update();
         mvc = MockMvcBuilders.webAppContextSetup(context).addFilters(correlationIdFilter)
                 .apply(springSecurity()).build();
         jdbc.sql("DELETE FROM reservation.cancellation_events").update();
         jdbc.sql("DELETE FROM reservation.pickup_credentials").update();
+        jdbc.sql("DELETE FROM reservation.idempotency_keys").update();
         jdbc.sql("DELETE FROM reservation.reservations").update();
         jdbc.sql("DELETE FROM offer.idempotency_keys").update();
         jdbc.sql("DELETE FROM offer.offers").update();

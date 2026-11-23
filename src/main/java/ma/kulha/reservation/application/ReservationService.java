@@ -7,6 +7,9 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.HexFormat;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import ma.kulha.merchant.application.MerchantApi;
 import ma.kulha.offer.application.OfferApi;
 import ma.kulha.offer.application.OfferSnapshot;
@@ -16,6 +19,7 @@ import ma.kulha.reservation.domain.model.ReservationCancellationReason;
 import ma.kulha.reservation.domain.model.ReservationFilter;
 import ma.kulha.reservation.domain.model.ReservationStatus;
 import ma.kulha.reservation.domain.repository.ReservationRepository;
+import ma.kulha.reservation.domain.repository.ReservationIdempotencyRepository;
 import ma.kulha.reservation.interfaces.dto.CancelReservationRequest;
 import ma.kulha.reservation.interfaces.dto.CollectReservationRequest;
 import ma.kulha.reservation.interfaces.dto.CreateReservationRequest;
@@ -30,16 +34,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReservationService {
     private static final String QR_PREFIX = "KULHA1:";
     private final ReservationRepository reservations;
+    private final ReservationIdempotencyRepository reservationIdempotency;
+    private final ObjectMapper objectMapper;
     private final OfferApi offers;
     private final MerchantApi merchants;
     private final ReservationReferenceGenerator references;
     private final NotificationOutbox notificationOutbox;
     private final Clock clock;
     private final int maximumQuantity;
-    ReservationService(ReservationRepository reservations, OfferApi offers, MerchantApi merchants,
+    ReservationService(ReservationRepository reservations, ReservationIdempotencyRepository reservationIdempotency,
+            ObjectMapper objectMapper, OfferApi offers, MerchantApi merchants,
             ReservationReferenceGenerator references, NotificationOutbox notificationOutbox, Clock clock,
             @Value("${app.reservation.max-quantity-per-customer:3}") int maximumQuantity) {
-        this.reservations = reservations; this.offers = offers; this.merchants = merchants;
+        this.reservations = reservations; this.reservationIdempotency = reservationIdempotency;
+        this.objectMapper = objectMapper; this.offers = offers; this.merchants = merchants;
         this.references = references; this.notificationOutbox = notificationOutbox; this.clock = clock;
         if (maximumQuantity < 1 || maximumQuantity > 20)
             throw new IllegalArgumentException("app.reservation.max-quantity-per-customer must be 1..20");
@@ -74,7 +82,25 @@ public class ReservationService {
                 reservable ? List.of(new PickupSlot(offer.pickupStart(), offer.pickupEnd(), offer.availableUnits())) : List.of());
     }
     @Transactional
-    public ReservationResponse create(UUID customerId, CreateReservationRequest request, Locale locale) {
+    public ReservationResponse create(UUID customerId, CreateReservationRequest request, Locale locale,
+            String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 128)
+            throw new InvalidReservationRequestException("A non-empty Idempotency-Key of at most 128 characters is required.");
+        String key = idempotencyKey.trim();
+        String requestHash = reservationRequestHash(request);
+        reservationIdempotency.lock(customerId, key);
+        var previous = reservationIdempotency.find(customerId, key);
+        if (previous.isPresent()) {
+            if (!MessageDigest.isEqual(previous.get().requestHash().getBytes(StandardCharsets.US_ASCII),
+                    requestHash.getBytes(StandardCharsets.US_ASCII))) {
+                throw new ReservationConflictException("Idempotency-Key was already used with a different reservation request.");
+            }
+            try {
+                return objectMapper.readValue(previous.get().responseSnapshot(), ReservationResponse.class);
+            } catch (JacksonException invalidSnapshot) {
+                throw new IllegalStateException("Stored reservation idempotency response cannot be read.", invalidSnapshot);
+            }
+        }
         if (request.priceMinor() != null || request.totalPriceMinor() != null)
             throw new InvalidReservationRequestException("Prices are calculated by the server and must not be sent by the client.");
         Instant now = clock.instant();
@@ -105,11 +131,36 @@ public class ReservationService {
         notificationOutbox.enqueue(customerId, "RESERVATION_CONFIRMED",
                 localized(locale, "Réservation confirmée", "Reservation confirmed", "تم تأكيد الحجز"),
                 localized(locale, "Votre panier est réservé. Consultez votre créneau de retrait.",
-                        "Your basket is booked. Check your pickup window.", "تم حجز سلتك. تحقق من موعد الاستلام."),
+                        "Your basket is booked. Check your pickup window.",
+                        "تم حجز سلتك. تحقق من موعد الاستلام."),
                 localized(locale, "Voir la réservation", "View reservation", "عرض الحجز"),
                 "/reservations/" + confirmed.reference());
         String qrPayload = issuePickupCredential(confirmed, now);
-        return ReservationResponse.from(confirmed, locale, now, qrPayload);
+        ReservationResponse response = ReservationResponse.from(confirmed, locale, now, qrPayload);
+        try {
+            reservationIdempotency.save(customerId, key, requestHash, confirmed.id(),
+                    objectMapper.writeValueAsString(response));
+        } catch (JacksonException serializationFailure) {
+            throw new IllegalStateException("Reservation response could not be persisted for idempotent replay.",
+                    serializationFailure);
+        }
+        return response;
+    }
+
+    private static String reservationRequestHash(CreateReservationRequest request) {
+        String canonical = String.join("\n",
+                request.offerId().toString(),
+                request.quantity().toString(),
+                request.pickupStart().toString(),
+                request.pickupEnd().toString(),
+                String.valueOf(request.priceMinor()),
+                String.valueOf(request.totalPriceMinor()));
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable.", impossible);
+        }
     }
     @Transactional
     public ReservationResponse get(String reference, UUID userId, boolean admin, boolean merchantStaff, Locale locale) {
@@ -169,12 +220,69 @@ public class ReservationService {
         return ReservationResponse.from(cancelled, locale, now);
     }
     @Transactional
+    public ma.kulha.reservation.interfaces.dto.PickupPreviewResponse previewPickup(
+            CollectReservationRequest request, UUID merchantUserId) {
+        Instant now = clock.instant();
+        if (request == null) throw new InvalidReservationRequestException("A QR token or pickup code is required.");
+        UUID merchantId = merchants.resolveActingMerchant(merchantUserId)
+                .orElseThrow(ReservationNotFoundException::new);
+        if (!merchants.isApproved(merchantId)
+                || !merchants.can(merchantUserId, merchantId, "VALIDATE_PICKUPS")) {
+            throw new ReservationNotFoundException();
+        }
+        Reservation reservation;
+        if (request.qrPayload() != null && !request.qrPayload().isBlank()) {
+            String payload = request.qrPayload().trim();
+            if (!payload.startsWith(QR_PREFIX) || payload.length() > 100)
+                throw new InvalidReservationRequestException("The QR code is invalid.");
+            String token = payload.substring(QR_PREFIX.length());
+            if (token.length() < 40 || token.length() > 60)
+                throw new InvalidReservationRequestException("The QR code is invalid.");
+            String tokenHash = ReservationReferenceGenerator.hashPickupQrToken(token);
+            reservation = reservations.findByPickupCredentialHashForUpdate(tokenHash, now)
+                    .orElseThrow(ReservationNotFoundException::new);
+        } else {
+            if (request.reference() == null || request.pickupCode() == null || request.pickupCode().isBlank())
+                throw new InvalidReservationRequestException("Enter the reservation reference and pickup code.");
+            reservation = reservations.findByReferenceForUpdate(request.reference().trim())
+                    .orElseThrow(ReservationNotFoundException::new);
+            if (!MessageDigest.isEqual(reservation.pickupCode().getBytes(StandardCharsets.UTF_8),
+                    request.pickupCode().trim().toUpperCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8))) {
+                throw new ReservationNotFoundException();
+            }
+        }
+        if (!reservation.merchantId().equals(merchantId)) throw new ReservationNotFoundException();
+        String validationState;
+        boolean canConfirm = false;
+        if (reservation.status() == ReservationStatus.COMPLETED) {
+            validationState = "ALREADY_COLLECTED";
+        } else if (reservation.status() != ReservationStatus.CONFIRMED) {
+            validationState = "NOT_VALID";
+        } else if (now.isBefore(reservation.pickupStart())) {
+            validationState = "WINDOW_NOT_OPEN";
+        } else if (!now.isBefore(reservation.pickupEnd())) {
+            validationState = "WINDOW_ENDED";
+        } else {
+            validationState = "VALID";
+            canConfirm = true;
+        }
+        return new ma.kulha.reservation.interfaces.dto.PickupPreviewResponse(
+                reservation.reference(), reservation.merchantName(), reservation.offerTitle(),
+                reservation.quantity(), reservation.totalPriceMinor(), "MAD",
+                reservation.pickupStart(), reservation.pickupEnd(), reservation.status().name(),
+                validationState, canConfirm);
+    }
+
+    @Transactional
     public ReservationResponse collect(CollectReservationRequest request, UUID merchantUserId, Locale locale) {
         Instant now = clock.instant();
         if (request == null) throw new InvalidReservationRequestException("A QR token or pickup code is required.");
         UUID merchantId = merchants.resolveActingMerchant(merchantUserId)
                 .orElseThrow(ReservationNotFoundException::new);
-        if (!merchants.isApproved(merchantId)) throw new ReservationNotFoundException();
+        if (!merchants.isApproved(merchantId)
+                || !merchants.can(merchantUserId, merchantId, "VALIDATE_PICKUPS")) {
+            throw new ReservationNotFoundException();
+        }
         Reservation reservation;
         if (request.qrPayload() != null && !request.qrPayload().isBlank()) {
             String payload = request.qrPayload().trim();
