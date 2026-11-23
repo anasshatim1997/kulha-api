@@ -14,7 +14,6 @@ import ma.kulha.identity.application.IdentityApi;
 import ma.kulha.merchant.application.MerchantApi;
 import ma.kulha.offer.application.OfferApi;
 import ma.kulha.reservation.application.ReservationSupportApi;
-import ma.kulha.offer.application.OfferApplicationService;
 import ma.kulha.shared.identity.UserAccountDirectory;
 import ma.kulha.admin.support.interfaces.dto.OpenSupportCaseRequest;
 import org.springframework.http.HttpStatus;
@@ -35,7 +34,6 @@ public class SupportCaseService {
 
     private final JdbcClient jdbc;
     private final ReservationSupportApi reservations;
-    private final OfferApplicationService offers;
     private final OfferApi offerApi;
     private final IdentityApi identities;
     private final MerchantApi merchants;
@@ -44,12 +42,11 @@ public class SupportCaseService {
     private final Clock clock;
     private final UserAccountDirectory userAccounts;
 
-    SupportCaseService(JdbcClient jdbc, ReservationSupportApi reservations, OfferApplicationService offers,
+    SupportCaseService(JdbcClient jdbc, ReservationSupportApi reservations,
                        OfferApi offerApi, IdentityApi identities, MerchantApi merchants, AuditApi audit,
                        NotificationOutbox notifications, Clock clock, UserAccountDirectory userAccounts) {
         this.jdbc = jdbc;
         this.reservations = reservations;
-        this.offers = offers;
         this.offerApi = offerApi;
         this.identities = identities;
         this.merchants = merchants;
@@ -91,7 +88,7 @@ public class SupportCaseService {
         Instant now = clock.instant();
         boolean hideOffer = "FOOD_SAFETY".equals(category) && offerId != null;
         if (hideOffer && offer != null && "PUBLISHED".equals(offer.status())) {
-            offers.adminSuspend(SYSTEM_ACTOR, offerId, "Food safety report under review");
+            offerApi.suspendForFoodSafety(SYSTEM_ACTOR, offerId, "Food safety report under review");
         }
 
         jdbc.sql("""
