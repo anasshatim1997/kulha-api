@@ -15,6 +15,7 @@ import java.sql.Statement;
 import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.FlywayException;
+import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -50,7 +51,7 @@ class AdminSupportMigrationIntegrationTest {
 
     @Test
     void upgradingV26PreservesSupportRowsAndUuidReferences() {
-        flyway().target("26").load().migrate();
+        migrateTo26();
 
         UUID customerId = UUID.randomUUID();
         UUID caseId = UUID.randomUUID();
@@ -127,6 +128,15 @@ class AdminSupportMigrationIntegrationTest {
         assertTrue(markerExists());
         assertTrue(tableExists("reservation", "idempotency_keys"));
         assertSupportForeignKeyBoundary();
+    }
+
+    private void migrateTo26() {
+        Flyway.configure()
+                .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+                .locations("classpath:db/migration")
+                .target(MigrationVersion.fromVersion("26"))
+                .load()
+                .migrate();
     }
 
     private Flyway flyway() {
