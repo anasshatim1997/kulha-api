@@ -51,11 +51,23 @@ class AdminAuditExportCompletenessIntegrationTest extends AbstractApiIntegration
                 auditQuery.list(null, null, null, null, null, "INSPECTION KEYWORD", 0, 20);
 
         assertThat(page.items()).hasSize(1);
+        assertThat(page.total()).isEqualTo(1);
         assertThat(page.items().getFirst().targetId()).isEqualTo("matching-target");
 
         java.io.StringWriter csv = new java.io.StringWriter();
         auditQuery.writeExport(admin.id(), null, null, null, null, null, "inspection keyword", csv);
         assertThat(csv.toString()).contains("matching-target").doesNotContain("unrelated-target");
+        assertThat(csv.toString().lines().count() - 1).isEqualTo(page.total());
+
+        AdminAuditQueryService.AuditPage allRows =
+                auditQuery.list(null, null, null, null, null, null, 0, 20);
+        AdminAuditQueryService.AuditPage blankSearch =
+                auditQuery.list(null, null, null, null, null, "   ", 0, 20);
+        assertThat(blankSearch.total()).isEqualTo(allRows.total());
+
+        java.io.StringWriter unfilteredCsv = new java.io.StringWriter();
+        auditQuery.writeExport(admin.id(), null, null, null, null, null, "   ", unfilteredCsv);
+        assertThat(unfilteredCsv.toString()).contains("matching-target").contains("unrelated-target");
     }
 
 }
