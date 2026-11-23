@@ -141,6 +141,7 @@ class AdminSupportMigrationIntegrationTest {
         return Flyway.configure()
                 .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
                 .locations("filesystem:" + location.toAbsolutePath())
+                .ignoreMigrationPatterns("*:missing")
                 .load();
     }
 
