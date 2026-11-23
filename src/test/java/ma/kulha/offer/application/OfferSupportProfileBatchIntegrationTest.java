@@ -48,7 +48,7 @@ class OfferSupportProfileBatchIntegrationTest extends AbstractApiIntegrationTest
                 return countStatements(super.getConnection(), statementCount);
             }
         };
-        OfferApi api = new OfferApiService(null, null, 30, Clock.systemUTC(), null, JdbcClient.create(counting));
+        OfferApi api = new OfferApiService(null, null, 30, Clock.systemUTC(), null, JdbcClient.create(counting), null);
 
         var profiles = api.findSupportProfiles(ids);
 
