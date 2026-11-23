@@ -27,15 +27,18 @@ class OfferApiService implements OfferApi {
     private final Clock clock;
     private final ApplicationEventPublisher events;
     private final JdbcClient jdbc;
+    private final OfferApplicationService offerApplication;
 
     OfferApiService(OfferRepository offers, MerchantApi merchants,
             @Value("${app.offer.reservation-cutoff-minutes:30}") long reservationCutoffMinutes,
-            Clock clock, ApplicationEventPublisher events, JdbcClient jdbc) {
+            Clock clock, ApplicationEventPublisher events, JdbcClient jdbc,
+            OfferApplicationService offerApplication) {
         this.offers = offers;
         this.merchants = merchants;
         this.clock = clock;
         this.events = events;
         this.jdbc = jdbc;
+        this.offerApplication = offerApplication;
         if (reservationCutoffMinutes < 0) throw new IllegalArgumentException("app.offer.reservation-cutoff-minutes cannot be negative");
         this.reservationCutoffMinutes = reservationCutoffMinutes;
     }
@@ -92,6 +95,10 @@ class OfferApiService implements OfferApi {
                         rs.getInt("price_minor"), rs.getInt("quantity_total"), rs.getInt("quantity_reserved"),
                         rs.getString("status"))).list();
         return new MerchantDashboardOffers(liveOffers, rows);
+    }
+
+    @Override public void suspendForFoodSafety(UUID actorId, UUID offerId, String reason) {
+        offerApplication.adminSuspend(actorId, offerId, reason);
     }
 
     private void publishSearchRefresh(UUID offerId) {
