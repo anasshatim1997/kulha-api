@@ -237,7 +237,7 @@ public class SupportCaseService {
                 OfferApi.SupportOfferProfile offer = offerApi.findSupportProfiles(List.of(item.offerId()))
                         .stream().findFirst().orElse(null);
                 if (offer != null && "PUBLISHED".equals(offer.status())) {
-                    offers.adminSuspend(adminId, item.offerId(), cleanReason);
+                    offerApi.suspendForFoodSafety(adminId, item.offerId(), cleanReason);
                 }
                 jdbc.sql("UPDATE admin.support_cases SET hidden_offer=TRUE, updated_at=:now WHERE id=:id")
                         .param("now", now.atOffset(java.time.ZoneOffset.UTC)).param("id", item.id()).update();
