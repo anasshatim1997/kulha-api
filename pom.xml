@@ -30,6 +30,19 @@
         <java.version>21</java.version>
         <jackson-bom.version>3.1.8</jackson-bom.version>
     </properties>
+
+    <!-- Pin the transitive Commons Compress dependency to a release that contains
+         fixes for CVE-2024-26308 and CVE-2024-25710. -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-compress</artifactId>
+                <version>1.28.0</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
