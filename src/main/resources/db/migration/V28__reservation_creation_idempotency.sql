@@ -1,3 +1,26 @@
+-- V28 is intentionally guarded independently of Flyway's version ordering.
+-- Flyway can run a later version when an intermediate version is absent from its
+-- configured locations, so require the durable success marker written by V27.
+DO $migration_guard$
+BEGIN
+    IF to_regclass('admin.migration_prerequisites') IS NULL THEN
+        RAISE EXCEPTION
+            'Cannot apply V28: V27 prerequisite marker table admin.migration_prerequisites is missing'
+            USING ERRCODE = '55000';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+          FROM admin.migration_prerequisites
+         WHERE migration_version = 27
+    ) THEN
+        RAISE EXCEPTION
+            'Cannot apply V28: successful V27 migration marker (version 27) is missing'
+            USING ERRCODE = '55000';
+    END IF;
+END
+$migration_guard$;
+
 -- A reservation creation key is unique per authenticated customer.
 -- The reservation, pickup credential, notification outbox event and exact HTTP
 -- response snapshot are committed in the same transaction by ReservationService.
