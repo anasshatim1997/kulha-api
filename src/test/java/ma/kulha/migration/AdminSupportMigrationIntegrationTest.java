@@ -84,7 +84,7 @@ class AdminSupportMigrationIntegrationTest {
 
     @Test
     void v28RejectsMissingPrerequisiteMarkerTable(@TempDir Path tempDir) throws IOException {
-        flyway().target("26").load().migrate();
+        migrateTo26();
 
         assertThrows(FlywayException.class, () -> flywayAt(tempDir).migrate());
         assertFalse(tableExists("reservation", "idempotency_keys"));
@@ -92,7 +92,7 @@ class AdminSupportMigrationIntegrationTest {
 
     @Test
     void v28RejectsMissingPrerequisiteMarkerRow(@TempDir Path tempDir) throws IOException {
-        flyway().target("26").load().migrate();
+        migrateTo26();
         execute("""
                 CREATE TABLE admin.migration_prerequisites (
                     migration_version INTEGER PRIMARY KEY,
@@ -106,7 +106,7 @@ class AdminSupportMigrationIntegrationTest {
 
     @Test
     void failedV27RollsBackAllConstraintDropsAndDoesNotWriteMarker() {
-        flyway().target("26").load().migrate();
+        migrateTo26();
         execute("ALTER TABLE admin.support_case_timeline DROP CONSTRAINT support_case_timeline_author_user_id_fkey");
 
         assertThrows(FlywayException.class, () -> flyway().migrate());
@@ -121,7 +121,7 @@ class AdminSupportMigrationIntegrationTest {
 
     @Test
     void successfulV27WritesMarkerAndAllowsV28() {
-        flyway().target("26").load().migrate();
+        migrateTo26();
 
         flyway().migrate();
 
