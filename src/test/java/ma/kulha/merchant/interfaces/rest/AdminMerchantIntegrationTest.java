@@ -89,6 +89,60 @@ class AdminMerchantIntegrationTest extends AbstractApiIntegrationTest {
     }
 
     @Test
+    void adminMerchantDetailsIncludeTheSavedDistrictMapPinAndPickupInstructions() throws Exception {
+        String profile = profileJson("Boulangerie Atlas")
+                .replace("\\"phone\\"", "\\"district\\":\\"Maarif\\",\\"latitude\\":33.589,\\"longitude\\":-7.62,\\"pickupInstructions\\":\\"Use the side entrance\\",\\"phone\\"");
+        String ownerToken = tokenFor(createUser("profile-owner@example.com", true));
+        MockHttpServletResponse applied = doPost("/api/v1/merchants/apply", profile, ownerToken);
+        String merchantId = field(applied, "id");
+
+        MockHttpServletResponse response = doGet("/api/v1/admin/merchants/" + merchantId, adminToken());
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(response.getContentAsString())
+                .contains("\\"district\\":\\"Maarif\\"")
+                .contains("\\"latitude\\":33.589")
+                .contains("\\"longitude\\":-7.62")
+                .contains("\\"pickupInstructions\\":\\"Use the side entrance\\"");
+    }
+
+    @Test
+    void requestInformationKeepsMerchantAccessLockedUntilTheOwnerResubmits() throws Exception {
+        String merchantId = applyAs("owner@example.com", "Boulangerie Atlas");
+        String ownerToken = tokenForEmail("owner@example.com");
+
+        MockHttpServletResponse requested = doPost(
+                "/api/v1/admin/merchants/" + merchantId + "/request-information",
+                "{\\"reason\\":\\"Please confirm the pickup entrance address.\\"}",
+                adminToken());
+
+        assertThat(requested.getStatus()).isEqualTo(200);
+        assertThat(requested.getContentAsString())
+                .contains("\\"status\\":\\"INFO_REQUIRED\\"")
+                .contains("Please confirm the pickup entrance address.");
+        assertThat(doGet("/api/v1/me", ownerToken).getContentAsString())
+                .contains("CUSTOMER")
+                .doesNotContain("MERCHANT");
+        assertThat(jdbc.sql("SELECT status FROM merchant.merchants WHERE id = :id")
+                .param("id", UUID.fromString(merchantId)).query(String.class).single()).isEqualTo("INFO_REQUIRED");
+        assertThat(emails.sent()).hasSize(1);
+        assertThat(emails.sent().getFirst().template()).isEqualTo(TemplateKey.MERCHANT_INFO_REQUIRED);
+        assertThat(emails.sent().getFirst().params().get("reason"))
+                .isEqualTo("Please confirm the pickup entrance address.");
+
+        MockHttpServletResponse resubmitted = doPut(profileJson("Boulangerie Atlas Centre"), ownerToken);
+
+        assertThat(resubmitted.getStatus()).isEqualTo(200);
+        assertThat(resubmitted.getContentAsString())
+                .contains("\\"id\\":\\""+merchantId+"\\"")
+                .contains("\\"status\\":\\"PENDING\\"")
+                .contains("\\"decisionReason\\":null");
+        assertThat(jdbc.sql("SELECT status FROM merchant.merchants WHERE id = :id")
+                .param("id", UUID.fromString(merchantId)).query(String.class).single()).isEqualTo("PENDING");
+        assertThat(auditCount(merchantId)).isEqualTo(1);
+    }
+
+    @Test
     void rejectRequiresAReason() throws Exception {
         String merchantId = applyAs("owner@example.com", "Boulangerie Atlas");
         String adminToken = adminToken();
