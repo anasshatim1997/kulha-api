@@ -90,8 +90,11 @@ class AdminMerchantIntegrationTest extends AbstractApiIntegrationTest {
 
     @Test
     void adminMerchantDetailsIncludeTheSavedDistrictMapPinAndPickupInstructions() throws Exception {
-        String profile = profileJson("Boulangerie Atlas")
-                .replace("\\"phone\\"", "\\"district\\":\\"Maarif\\",\\"latitude\\":33.589,\\"longitude\\":-7.62,\\"pickupInstructions\\":\\"Use the side entrance\\",\\"phone\\"");
+        String profile = """
+                {"name":"Boulangerie Atlas","businessType":"BAKERY","address":"12 rue des Fleurs","city":"Casablanca",
+                 "district":"Maarif","latitude":33.589,"longitude":-7.62,"phone":"+212600000000",
+                 "openingHours":"Lun-Sam 7h-20h","pickupInstructions":"Use the side entrance"}
+                """;
         String ownerToken = tokenFor(createUser("profile-owner@example.com", true));
         MockHttpServletResponse applied = doPost("/api/v1/merchants/apply", profile, ownerToken);
         String merchantId = field(applied, "id");
@@ -100,10 +103,10 @@ class AdminMerchantIntegrationTest extends AbstractApiIntegrationTest {
 
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(response.getContentAsString())
-                .contains("\\"district\\":\\"Maarif\\"")
-                .contains("\\"latitude\\":33.589")
-                .contains("\\"longitude\\":-7.62")
-                .contains("\\"pickupInstructions\\":\\"Use the side entrance\\"");
+                .contains("\"district\":\"Maarif\"")
+                .contains("\"latitude\":33.589")
+                .contains("\"longitude\":-7.62")
+                .contains("\"pickupInstructions\":\"Use the side entrance\"");
     }
 
     @Test
@@ -113,12 +116,12 @@ class AdminMerchantIntegrationTest extends AbstractApiIntegrationTest {
 
         MockHttpServletResponse requested = doPost(
                 "/api/v1/admin/merchants/" + merchantId + "/request-information",
-                "{\\"reason\\":\\"Please confirm the pickup entrance address.\\"}",
+                "{\"reason\":\"Please confirm the pickup entrance address.\"}",
                 adminToken());
 
         assertThat(requested.getStatus()).isEqualTo(200);
         assertThat(requested.getContentAsString())
-                .contains("\\"status\\":\\"INFO_REQUIRED\\"")
+                .contains("\"status\":\"INFO_REQUIRED\"")
                 .contains("Please confirm the pickup entrance address.");
         assertThat(doGet("/api/v1/me", ownerToken).getContentAsString())
                 .contains("CUSTOMER")
@@ -134,9 +137,9 @@ class AdminMerchantIntegrationTest extends AbstractApiIntegrationTest {
 
         assertThat(resubmitted.getStatus()).isEqualTo(200);
         assertThat(resubmitted.getContentAsString())
-                .contains("\\"id\\":\\""+merchantId+"\\"")
-                .contains("\\"status\\":\\"PENDING\\"")
-                .contains("\\"decisionReason\\":null");
+                .contains("\"id\":\"" + merchantId + "\"")
+                .contains("\"status\":\"PENDING\"")
+                .contains("\"decisionReason\":null");
         assertThat(jdbc.sql("SELECT status FROM merchant.merchants WHERE id = :id")
                 .param("id", UUID.fromString(merchantId)).query(String.class).single()).isEqualTo("PENDING");
         assertThat(auditCount(merchantId)).isEqualTo(1);
