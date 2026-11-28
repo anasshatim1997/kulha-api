@@ -15,6 +15,10 @@ public record AdminMerchantResponse(
         BusinessType businessType,
         String address,
         String city,
+        String district,
+        Double latitude,
+        Double longitude,
+        String pickupInstructions,
         String phone,
         String openingHours,
         MerchantStatus status,
@@ -26,7 +30,8 @@ public record AdminMerchantResponse(
     public static AdminMerchantResponse from(AdminMerchantView view) {
         Merchant m = view.merchant();
         return new AdminMerchantResponse(m.id(), m.ownerUserId(), view.ownerEmail(), m.name(), m.businessType(),
-                m.address(), m.city(), m.phone(), m.openingHours(), m.status(), m.decisionReason(),
+                m.address(), m.city(), m.district(), m.latitude(), m.longitude(), m.pickupInstructions(),
+                m.phone(), m.openingHours(), m.status(), m.decisionReason(),
                 m.decidedBy(), m.decidedAt(), m.createdAt());
     }
 }
